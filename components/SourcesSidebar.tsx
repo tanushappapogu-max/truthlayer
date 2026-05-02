@@ -8,29 +8,35 @@ interface Props {
   verifying: boolean;
 }
 
-const STATUS_COLORS = {
-  SUPPORTED: 'border-green-500/40 bg-green-500/5',
-  UNSUPPORTED: 'border-red-500/40 bg-red-500/5',
-  UNVERIFIABLE: 'border-purple-500/40 bg-purple-500/5',
-  UNREACHABLE: 'border-yellow-500/40 bg-yellow-500/5',
+const STATUS = {
+  SUPPORTED:    { dot: 'bg-emerald-400', ring: 'border-emerald-500/25 bg-emerald-500/5', label: 'Verified' },
+  UNSUPPORTED:  { dot: 'bg-red-400',     ring: 'border-red-500/25 bg-red-500/5',         label: 'Flagged'  },
+  UNVERIFIABLE: { dot: 'bg-purple-400',  ring: 'border-purple-500/25 bg-purple-500/5',   label: 'Uncertain'},
+  UNREACHABLE:  { dot: 'bg-amber-400',   ring: 'border-amber-500/25 bg-amber-500/5',     label: 'No source'},
 };
 
-const STATUS_DOT = {
-  SUPPORTED: 'bg-green-400',
-  UNSUPPORTED: 'bg-red-400',
-  UNVERIFIABLE: 'bg-purple-400',
-  UNREACHABLE: 'bg-yellow-400',
-};
+function getFavicon(url: string) {
+  try {
+    const { origin } = new URL(url);
+    return `https://www.google.com/s2/favicons?domain=${origin}&sz=32`;
+  } catch { return null; }
+}
+
+function getHostname(url: string) {
+  try { return new URL(url).hostname.replace('www.', ''); } catch { return url; }
+}
 
 export default function SourcesSidebar({ citations, verifyResults, verifying }: Props) {
   return (
-    <div className="w-64 shrink-0">
-      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Sources</h3>
-      <div className="flex flex-col gap-2">
+    <div className="w-56 shrink-0">
+      <p className="text-[10px] font-semibold text-[#4a4e6a] uppercase tracking-widest mb-3 px-1">Sources</p>
+      <div className="flex flex-col gap-1.5">
         {citations.map((url, i) => {
-          const result = verifyResults.find((r) => r.index === i);
+          const result = verifyResults.find(r => r.index === i);
           const status = result?.status;
-          const hostname = (() => { try { return new URL(url).hostname.replace('www.', ''); } catch { return url; } })();
+          const s = status ? STATUS[status] : null;
+          const host = getHostname(url);
+          const favicon = getFavicon(url);
 
           return (
             <a
@@ -38,20 +44,29 @@ export default function SourcesSidebar({ citations, verifyResults, verifying }: 
               href={url}
               target="_blank"
               rel="noopener noreferrer"
-              className={`flex items-start gap-2 p-2.5 rounded-lg border text-xs transition-colors hover:border-[#6366f1]/50 ${
-                status ? STATUS_COLORS[status] : 'border-[#2e3050] bg-transparent'
-              }`}
+              className={`
+                group flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-xs
+                transition-all duration-150 hover:scale-[1.01]
+                ${s ? `${s.ring} border` : 'border-[#1e2030] bg-[#13141c] hover:bg-[#1a1b26] hover:border-[#2e3050]'}
+              `}
             >
-              <span className="mt-1 shrink-0 text-gray-500 font-semibold">{i + 1}</span>
-              <div className="min-w-0">
-                <p className="text-gray-300 truncate">{hostname}</p>
-                <p className="text-gray-500 truncate text-[10px]">{url}</p>
+              {/* Number */}
+              <span className="text-[10px] font-bold text-[#4a4e6a] shrink-0 w-4 text-center">{i + 1}</span>
+
+              {/* Favicon + host */}
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                {favicon && (
+                  <img src={favicon} alt="" className="w-3.5 h-3.5 rounded-sm shrink-0 opacity-80" />
+                )}
+                <span className="text-[#8b8fa8] group-hover:text-gray-300 truncate transition-colors">{host}</span>
               </div>
+
+              {/* Status dot */}
               {verifying && !status && (
-                <span className="ml-auto shrink-0 w-1.5 h-1.5 rounded-full bg-gray-600 animate-pulse mt-1" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#2e3050] animate-pulse shrink-0" />
               )}
-              {status && (
-                <span className={`ml-auto shrink-0 w-1.5 h-1.5 rounded-full mt-1 ${STATUS_DOT[status]}`} />
+              {status && s && (
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`} title={s.label} />
               )}
             </a>
           );
