@@ -26,8 +26,8 @@ async function fetchViaJina(url: string): Promise<string | null> {
   }
 }
 
-// Serper — Google Search fallback when URL can't be fetched
-async function fetchViaSerper(claim: string, url: string): Promise<string | null> {
+// Serper — Google Search results for the claim (runs in parallel with Jina, not just fallback)
+async function fetchViaSerper(claim: string): Promise<string | null> {
   const serperKey = process.env.SERPER_API_KEY;
   if (!serperKey) return null;
 
@@ -38,17 +38,19 @@ async function fetchViaSerper(claim: string, url: string): Promise<string | null
         'X-API-KEY': serperKey,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ q: claim, num: 5 }),
+      body: JSON.stringify({ q: claim, num: 6 }),
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) return null;
     const data = await res.json();
 
-    const snippets: string[] = [];
-    for (const result of data.organic ?? []) {
-      if (result.snippet) snippets.push(`[${result.link}] ${result.snippet}`);
+    const parts: string[] = [];
+    if (data.answerBox?.answer) parts.push(`Answer box: ${data.answerBox.answer}`);
+    if (data.answerBox?.snippet) parts.push(`Answer box: ${data.answerBox.snippet}`);
+    for (const r of data.organic ?? []) {
+      if (r.snippet) parts.push(`[${r.link}] ${r.snippet}`);
     }
-    return snippets.join('\n\n') || null;
+    return parts.join('\n\n') || null;
   } catch {
     return null;
   }
@@ -60,24 +62,26 @@ async function verifyClaim(
   url: string,
   apiKey: string
 ): Promise<{ status: 'SUPPORTED' | 'UNSUPPORTED' | 'UNVERIFIABLE'; sourceExcerpt?: string; corrected?: string }> {
-  const prompt = `You are a citation fact-checker. Given a CLAIM and SOURCE TEXT, determine if the source supports, contradicts, or simply does not address the claim.
+  const prompt = `You are a strict citation fact-checker. You are given a CLAIM and SOURCE TEXT (from the cited URL and/or Google search results). Determine whether the claim is accurate.
 
-SOURCE TEXT (from ${url}):
+SOURCE TEXT:
 ${sourceText}
 
 CLAIM:
 ${claim}
 
 Rules:
-- SUPPORTED: the source explicitly confirms the claim
-- UNSUPPORTED: the source explicitly contradicts or says something different
-- UNVERIFIABLE: the source does not contain enough information to confirm or deny the claim
+- SUPPORTED: the source confirms the claim is accurate
+- UNSUPPORTED: the source contradicts the claim or the claim contains a clearly wrong fact (wrong date, wrong person, wrong number, wrong company, etc.)
+- UNVERIFIABLE: use ONLY when the source genuinely contains zero relevant information — not when you are uncertain
+
+Be decisive. If the search results give you enough context to judge the claim, use SUPPORTED or UNSUPPORTED. Only fall back to UNVERIFIABLE if the sources are completely silent on the topic.
 
 Respond in this exact JSON format with no extra text:
 {
   "verdict": "SUPPORTED" or "UNSUPPORTED" or "UNVERIFIABLE",
-  "sourceExcerpt": "the most relevant sentence from the source (max 150 chars, empty string if UNVERIFIABLE)",
-  "corrected": "rewritten claim using only what the source says — only include if UNSUPPORTED, omit otherwise"
+  "sourceExcerpt": "the most relevant quote from the source (max 150 chars)",
+  "corrected": "corrected version of the claim based only on the source — only if UNSUPPORTED"
 }`;
 
   const res = await fetch('https://api.perplexity.ai/chat/completions', {
@@ -139,9 +143,17 @@ export async function POST(req: NextRequest) {
       const claim = claimMap[i];
       if (!claim?.trim()) return { index: i, url, status: 'UNREACHABLE' };
 
-      // Try Jina first, fall back to Serper
-      let sourceText = await fetchViaJina(url);
-      if (!sourceText) sourceText = await fetchViaSerper(claim, url);
+      // Fetch URL and search in parallel — combine for maximum context
+      const [jinaText, serperText] = await Promise.all([
+        fetchViaJina(url),
+        fetchViaSerper(claim),
+      ]);
+
+      const parts: string[] = [];
+      if (jinaText) parts.push(`--- FROM CITED URL (${url}) ---\n${jinaText.slice(0, 3000)}`);
+      if (serperText) parts.push(`--- FROM WEB SEARCH ---\n${serperText}`);
+      const sourceText = parts.join('\n\n') || null;
+
       if (!sourceText) return { index: i, url, status: 'UNREACHABLE' };
 
       try {
