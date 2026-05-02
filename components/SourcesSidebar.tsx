@@ -11,12 +11,14 @@ interface Props {
 const STATUS_COLORS = {
   SUPPORTED: 'border-green-500/40 bg-green-500/5',
   UNSUPPORTED: 'border-red-500/40 bg-red-500/5',
+  UNVERIFIABLE: 'border-purple-500/40 bg-purple-500/5',
   UNREACHABLE: 'border-yellow-500/40 bg-yellow-500/5',
 };
 
 const STATUS_DOT = {
   SUPPORTED: 'bg-green-400',
   UNSUPPORTED: 'bg-red-400',
+  UNVERIFIABLE: 'bg-purple-400',
   UNREACHABLE: 'bg-yellow-400',
 };
 
