@@ -103,19 +103,20 @@ export async function POST(req: NextRequest) {
   const apiKey = process.env.PERPLEXITY_API_KEY;
   if (!apiKey) return NextResponse.json({ error: 'Missing PERPLEXITY_API_KEY' }, { status: 500 });
 
-  // Extract sentences that contain citation markers like [1], [2], etc.
-  const citationPattern = /\[(\d+)\]/g;
+  // For each citation [N], look backward to find the sentence it belongs to
   const claimMap: Record<number, string> = {};
 
-  const sentences = answer.split(/(?<=[.!?])\s+/);
-  for (const sentence of sentences) {
-    const matches = [...sentence.matchAll(citationPattern)];
-    for (const match of matches) {
-      const idx = parseInt(match[1]) - 1;
-      if (idx >= 0 && idx < citations.length) {
-        claimMap[idx] = (claimMap[idx] ?? '') + ' ' + sentence.replace(citationPattern, '').trim();
-      }
-    }
+  for (let i = 0; i < citations.length; i++) {
+    const marker = `[${i + 1}]`;
+    const markerIdx = answer.indexOf(marker);
+    if (markerIdx === -1) continue;
+
+    const before = answer.slice(0, markerIdx).trim();
+    // Find start of the current sentence — only add offset when pattern is actually found
+    const breakAt = (str: string, sub: string) => { const i = str.lastIndexOf(sub); return i >= 0 ? i + sub.length : 0; };
+    const lastBreak = Math.max(breakAt(before, '. '), breakAt(before, '! '), breakAt(before, '? '), breakAt(before, '.\n'));
+    const claim = before.slice(lastBreak).replace(/\[\d+\]/g, '').trim();
+    if (claim) claimMap[i] = claim;
   }
 
   const results = await Promise.all(
