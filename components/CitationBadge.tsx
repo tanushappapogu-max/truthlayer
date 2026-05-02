@@ -12,6 +12,7 @@ interface Props {
 const EMOJI = {
   SUPPORTED: '✅',
   UNSUPPORTED: '🔴',
+  UNVERIFIABLE: '🟣',
   UNREACHABLE: '🟡',
 };
 

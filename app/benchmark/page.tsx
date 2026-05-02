@@ -3,14 +3,14 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
-type Verdict = 'SUPPORTED' | 'UNSUPPORTED' | 'UNREACHABLE';
+type Verdict = 'SUPPORTED' | 'UNSUPPORTED' | 'UNVERIFIABLE' | 'UNREACHABLE';
 
 interface BenchmarkCase {
   id: number;
-  question: string;
   claim: string;
   sourceUrl: string;
   groundTruth: 'SUPPORTED' | 'UNSUPPORTED';
+  category: string;
 }
 
 interface BenchmarkResult extends BenchmarkCase {
@@ -18,79 +18,122 @@ interface BenchmarkResult extends BenchmarkCase {
   correct: boolean | null;
 }
 
-// 10 real-world cases drawn from known Perplexity hallucination patterns
 const CASES: BenchmarkCase[] = [
+  // --- SUPPORTED (true claims, verifiable from source) ---
   {
     id: 1,
-    question: 'What is the speed of light?',
-    claim: 'The speed of light in a vacuum is approximately 299,792,458 meters per second.',
-    sourceUrl: 'https://en.wikipedia.org/wiki/Speed_of_light',
+    claim: 'NASA was founded in 1958.',
+    sourceUrl: 'https://www.nasa.gov/history/',
     groundTruth: 'SUPPORTED',
+    category: 'Government',
   },
   {
     id: 2,
-    question: 'When was the Eiffel Tower built?',
-    claim: 'The Eiffel Tower was completed in 1889 and stands 330 meters tall.',
-    sourceUrl: 'https://en.wikipedia.org/wiki/Eiffel_Tower',
+    claim: 'The WHO declared COVID-19 a pandemic on March 11, 2020.',
+    sourceUrl: 'https://www.who.int/director-general/speeches/detail/who-director-general-s-opening-remarks-at-the-media-briefing-on-covid-19---11-march-2020',
     groundTruth: 'SUPPORTED',
+    category: 'Health',
   },
   {
     id: 3,
-    question: 'What is GPT-4?',
-    claim: 'GPT-4 was released by OpenAI in March 2023.',
-    sourceUrl: 'https://en.wikipedia.org/wiki/GPT-4',
+    claim: 'OpenAI released GPT-4 in March 2023.',
+    sourceUrl: 'https://openai.com/research/gpt-4',
     groundTruth: 'SUPPORTED',
+    category: 'AI',
   },
   {
     id: 4,
-    question: 'Population of Japan',
-    claim: 'Japan has a population of approximately 125 million people.',
-    sourceUrl: 'https://en.wikipedia.org/wiki/Japan',
+    claim: 'Apple became the first U.S. company to reach a $1 trillion market cap.',
+    sourceUrl: 'https://www.bbc.com/news/business-45100234',
     groundTruth: 'SUPPORTED',
+    category: 'Business',
   },
   {
     id: 5,
-    question: 'What does DNA stand for?',
-    claim: 'DNA stands for Deoxyribonucleic acid.',
-    sourceUrl: 'https://en.wikipedia.org/wiki/DNA',
+    claim: 'The Pfizer-BioNTech COVID-19 vaccine received FDA emergency use authorization in December 2020.',
+    sourceUrl: 'https://www.fda.gov/emergency-preparedness-and-response/coronavirus-disease-2019-covid-19/pfizer-biontech-covid-19-vaccines',
     groundTruth: 'SUPPORTED',
+    category: 'Health',
   },
   {
     id: 6,
-    question: 'Who invented the telephone?',
-    claim: 'Thomas Edison invented the telephone in 1876.',
-    sourceUrl: 'https://en.wikipedia.org/wiki/Telephone',
-    groundTruth: 'UNSUPPORTED',
+    claim: 'The Paris Agreement was adopted in 2015 to limit global warming.',
+    sourceUrl: 'https://unfccc.int/process-and-meetings/the-paris-agreement',
+    groundTruth: 'SUPPORTED',
+    category: 'Policy',
   },
   {
     id: 7,
-    question: 'What is the boiling point of water?',
-    claim: 'Water boils at 90 degrees Celsius at standard atmospheric pressure.',
-    sourceUrl: 'https://en.wikipedia.org/wiki/Boiling_point',
-    groundTruth: 'UNSUPPORTED',
+    claim: 'Python was created by Guido van Rossum.',
+    sourceUrl: 'https://docs.python.org/3/faq/general.html',
+    groundTruth: 'SUPPORTED',
+    category: 'Tech',
   },
   {
     id: 8,
-    question: 'How many bones in the human body?',
-    claim: 'The human body has 206 bones in adults.',
-    sourceUrl: 'https://en.wikipedia.org/wiki/Human_skeleton',
+    claim: 'The James Webb Space Telescope launched on December 25, 2021.',
+    sourceUrl: 'https://www.nasa.gov/mission/webb/',
     groundTruth: 'SUPPORTED',
+    category: 'Science',
   },
+  // --- UNSUPPORTED (hallucinated claims) ---
   {
     id: 9,
-    question: 'What is the largest planet?',
-    claim: 'Saturn is the largest planet in our solar system.',
-    sourceUrl: 'https://en.wikipedia.org/wiki/Jupiter',
+    claim: 'Elon Musk founded Tesla Motors in 2003.',
+    sourceUrl: 'https://www.tesla.com/about',
     groundTruth: 'UNSUPPORTED',
+    category: 'Business',
   },
   {
     id: 10,
-    question: 'When did World War II end?',
-    claim: 'World War II ended in 1943 with the Allied victory.',
-    sourceUrl: 'https://en.wikipedia.org/wiki/World_War_II',
+    claim: 'The iPhone was first released in 2008.',
+    sourceUrl: 'https://www.apple.com/newsroom/2007/01/09apple-reinvents-the-phone-with-iphone/',
     groundTruth: 'UNSUPPORTED',
+    category: 'Tech',
+  },
+  {
+    id: 11,
+    claim: 'ChatGPT was released by Google in November 2022.',
+    sourceUrl: 'https://openai.com/blog/chatgpt',
+    groundTruth: 'UNSUPPORTED',
+    category: 'AI',
+  },
+  {
+    id: 12,
+    claim: 'The Moderna COVID-19 vaccine is 100% effective against all variants.',
+    sourceUrl: 'https://www.cdc.gov/coronavirus/2019-ncov/vaccines/different-vaccines/Moderna.html',
+    groundTruth: 'UNSUPPORTED',
+    category: 'Health',
+  },
+  {
+    id: 13,
+    claim: 'Amazon was founded in Seattle in 1997.',
+    sourceUrl: 'https://www.aboutamazon.com/about-us',
+    groundTruth: 'UNSUPPORTED',
+    category: 'Business',
+  },
+  {
+    id: 14,
+    claim: 'The Artemis I mission successfully landed astronauts on the Moon.',
+    sourceUrl: 'https://www.nasa.gov/missions/artemis/artemis-i/',
+    groundTruth: 'UNSUPPORTED',
+    category: 'Science',
+  },
+  {
+    id: 15,
+    claim: 'Python 4.0 was released in 2023.',
+    sourceUrl: 'https://docs.python.org/3/whatsnew/index.html',
+    groundTruth: 'UNSUPPORTED',
+    category: 'Tech',
   },
 ];
+
+const STATUS_COLORS: Record<Verdict, string> = {
+  SUPPORTED: 'bg-green-500/20 text-green-400',
+  UNSUPPORTED: 'bg-red-500/20 text-red-400',
+  UNVERIFIABLE: 'bg-purple-500/20 text-purple-400',
+  UNREACHABLE: 'bg-yellow-500/20 text-yellow-400',
+};
 
 export default function BenchmarkPage() {
   const [results, setResults] = useState<BenchmarkResult[]>([]);
@@ -114,7 +157,9 @@ export default function BenchmarkPage() {
         });
         const data = await res.json();
         const predicted: Verdict = data.results?.[0]?.status ?? 'UNREACHABLE';
-        const correct = predicted !== 'UNREACHABLE' && predicted === c.groundTruth;
+        // UNVERIFIABLE = we skip from scoring (not a wrong call, just insufficient source)
+        const scorable = predicted !== 'UNREACHABLE' && predicted !== 'UNVERIFIABLE';
+        const correct = scorable ? predicted === c.groundTruth : null;
         setResults((prev) =>
           prev.map((r) => (r.id === c.id ? { ...r, predicted, correct } : r))
         );
@@ -129,13 +174,15 @@ export default function BenchmarkPage() {
     setDone(true);
   }
 
-  const scored = results.filter((r) => r.predicted && r.predicted !== 'UNREACHABLE');
+  const scored = results.filter((r) => r.predicted && r.predicted !== 'UNREACHABLE' && r.predicted !== 'UNVERIFIABLE');
   const tp = scored.filter((r) => r.predicted === 'UNSUPPORTED' && r.groundTruth === 'UNSUPPORTED').length;
   const fp = scored.filter((r) => r.predicted === 'UNSUPPORTED' && r.groundTruth === 'SUPPORTED').length;
   const fn = scored.filter((r) => r.predicted === 'SUPPORTED' && r.groundTruth === 'UNSUPPORTED').length;
   const precision = tp + fp > 0 ? tp / (tp + fp) : 0;
   const recall = tp + fn > 0 ? tp / (tp + fn) : 0;
   const f1 = precision + recall > 0 ? (2 * precision * recall) / (precision + recall) : 0;
+  const unverifiable = results.filter((r) => r.predicted === 'UNVERIFIABLE').length;
+  const unreachable = results.filter((r) => r.predicted === 'UNREACHABLE').length;
 
   return (
     <div className="min-h-screen bg-[#12131f] text-white flex flex-col">
@@ -153,32 +200,40 @@ export default function BenchmarkPage() {
           <div>
             <h1 className="text-xl font-bold mb-1">Citation Verification Benchmark</h1>
             <p className="text-gray-400 text-sm">
-              10 claim/source pairs — 5 faithful, 5 hallucinated. Measures precision, recall, and F1.
+              {CASES.length} real-world claim/source pairs across AI, health, science, business, and policy.
+              Sourced from nasa.gov, openai.com, bbc.com, cdc.gov, and more.
             </p>
           </div>
           <button
             onClick={runBenchmark}
             disabled={running}
-            className="px-4 py-2 rounded-lg bg-[#6366f1] hover:bg-[#5254cc] disabled:opacity-50 text-sm font-medium transition-colors"
+            className="px-4 py-2 rounded-lg bg-[#6366f1] hover:bg-[#5254cc] disabled:opacity-50 text-sm font-medium transition-colors shrink-0"
           >
             {running ? 'Running...' : 'Run Benchmark'}
           </button>
         </div>
 
         {done && (
-          <div className="w-full grid grid-cols-3 gap-4 mb-8">
-            {[
-              { label: 'Precision', value: precision, desc: 'Of flagged claims, how many were actually wrong' },
-              { label: 'Recall', value: recall, desc: 'Of all wrong claims, how many did we catch' },
-              { label: 'F1 Score', value: f1, desc: 'Harmonic mean of precision and recall' },
-            ].map((m) => (
-              <div key={m.label} className="bg-[#1e1f2e] border border-[#2e3050] rounded-xl p-4">
-                <p className="text-2xl font-bold text-[#6366f1]">{(m.value * 100).toFixed(1)}%</p>
-                <p className="text-sm font-medium text-white mt-1">{m.label}</p>
-                <p className="text-[11px] text-gray-500 mt-0.5">{m.desc}</p>
-              </div>
-            ))}
-          </div>
+          <>
+            <div className="w-full grid grid-cols-3 gap-4 mb-4">
+              {[
+                { label: 'Precision', value: precision, desc: 'Of flagged claims, how many were actually wrong' },
+                { label: 'Recall', value: recall, desc: 'Of all wrong claims, how many did we catch' },
+                { label: 'F1 Score', value: f1, desc: 'Harmonic mean of precision and recall' },
+              ].map((m) => (
+                <div key={m.label} className="bg-[#1e1f2e] border border-[#2e3050] rounded-xl p-4">
+                  <p className="text-2xl font-bold text-[#6366f1]">{(m.value * 100).toFixed(1)}%</p>
+                  <p className="text-sm font-medium text-white mt-1">{m.label}</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">{m.desc}</p>
+                </div>
+              ))}
+            </div>
+            <div className="w-full flex gap-4 text-xs text-gray-500 mb-8">
+              <span className="text-purple-400">{unverifiable} unverifiable (excluded from score — source insufficient)</span>
+              <span className="text-yellow-400">{unreachable} unreachable (fetch failed)</span>
+              <span className="text-gray-400">{scored.length} scored</span>
+            </div>
+          </>
         )}
 
         {results.length > 0 && (
@@ -196,7 +251,10 @@ export default function BenchmarkPage() {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <p className="text-gray-300">{r.claim}</p>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#2e3050] text-gray-400 uppercase tracking-wide">{r.category}</span>
+                    </div>
+                    <p className="text-gray-200">{r.claim}</p>
                     <a
                       href={r.sourceUrl}
                       target="_blank"
@@ -208,24 +266,16 @@ export default function BenchmarkPage() {
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0 text-xs">
                     <span className={`px-2 py-0.5 rounded font-medium ${
-                      r.groundTruth === 'SUPPORTED'
-                        ? 'bg-green-500/20 text-green-400'
-                        : 'bg-red-500/20 text-red-400'
+                      r.groundTruth === 'SUPPORTED' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
                     }`}>
                       Truth: {r.groundTruth}
                     </span>
                     {r.predicted ? (
-                      <span className={`px-2 py-0.5 rounded font-medium ${
-                        r.predicted === 'SUPPORTED'
-                          ? 'bg-green-500/20 text-green-400'
-                          : r.predicted === 'UNSUPPORTED'
-                          ? 'bg-red-500/20 text-red-400'
-                          : 'bg-yellow-500/20 text-yellow-400'
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded font-medium ${STATUS_COLORS[r.predicted]}`}>
                         Got: {r.predicted}
                       </span>
                     ) : (
-                      <span className="text-gray-600 animate-pulse">testing...</span>
+                      <span className="text-gray-600 animate-pulse text-[11px]">testing...</span>
                     )}
                   </div>
                 </div>

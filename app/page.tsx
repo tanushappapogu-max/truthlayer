@@ -132,6 +132,7 @@ export default function Home() {
                   <div className="mt-6 flex gap-4 text-xs text-gray-500 border-t border-[#1e1f2e] pt-4">
                     <span>✅ {verifyResults.filter((r) => r.status === 'SUPPORTED').length} verified</span>
                     <span>🔴 {verifyResults.filter((r) => r.status === 'UNSUPPORTED').length} flagged</span>
+                    <span>🟣 {verifyResults.filter((r) => r.status === 'UNVERIFIABLE').length} unverifiable</span>
                     <span>🟡 {verifyResults.filter((r) => r.status === 'UNREACHABLE').length} unreachable</span>
                   </div>
                 )}
