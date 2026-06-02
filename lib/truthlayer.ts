@@ -261,7 +261,8 @@ function ngramOverlap(claim: string, sourceText: string, n = 5): number {
 }
 
 function extractNumbers(text: string): string[] {
-  return [...normalizeText(text).matchAll(/\b\d[\d,]*(?:\.\d+)?%?\b/g)].map(match =>
+  // Extract from original text (before normalization strips commas)
+  return [...text.matchAll(/\b\d[\d,]*(?:\.\d+)?%?\b/g)].map(match =>
     match[0].replace(/,/g, '')
   );
 }
@@ -290,15 +291,33 @@ function contextualNumberContradiction(claim: string, evidenceText: string): str
   return null;
 }
 
+function stemToken(token: string): string {
+  return token
+    .replace(/(?:ly|ed|ing|tion|ment|ness|ity|ous|ive|ful|less|able|ible|ally|ily)$/, '')
+    .replace(/i$/, 'y'); // privately -> privat -> privaty? No: just match root
+}
+
+function hasTokenOrVariant(tokens: Set<string>, target: string): boolean {
+  if (tokens.has(target)) return true;
+  const targetStem = stemToken(target);
+  if (targetStem.length < 3) return false;
+  for (const t of tokens) {
+    if (stemToken(t) === targetStem) return true;
+    // Also check if one contains the other (e.g., "privately" contains "private")
+    if (t.length >= 4 && target.length >= 4 && (t.startsWith(target) || target.startsWith(t))) return true;
+  }
+  return false;
+}
+
 function contrastContradiction(claim: string, evidenceText: string): string | null {
   const claimTokens = uniqueTokens(claim);
   const evidenceTokens = uniqueTokens(evidenceText);
 
   for (const [left, right] of CONTRAST_PAIRS) {
-    if (claimTokens.has(left) && evidenceTokens.has(right) && !evidenceTokens.has(left)) {
+    if (hasTokenOrVariant(claimTokens, left) && hasTokenOrVariant(evidenceTokens, right) && !hasTokenOrVariant(evidenceTokens, left)) {
       return `Claim says "${left}", while the strongest evidence says "${right}".`;
     }
-    if (claimTokens.has(right) && evidenceTokens.has(left) && !evidenceTokens.has(right)) {
+    if (hasTokenOrVariant(claimTokens, right) && hasTokenOrVariant(evidenceTokens, left) && !hasTokenOrVariant(evidenceTokens, right)) {
       return `Claim says "${right}", while the strongest evidence says "${left}".`;
     }
   }
