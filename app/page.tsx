@@ -5,7 +5,8 @@ import Link from 'next/link';
 import SearchBar from '@/components/SearchBar';
 import AnswerPanel from '@/components/AnswerPanel';
 import SourcesSidebar from '@/components/SourcesSidebar';
-import type { VerifyResult } from '@/app/api/verify/route';
+import AcceptanceGate from '@/components/AcceptanceGate';
+import type { AcceptanceGateReport, VerifyResult } from '@/lib/truthlayer';
 
 type Stage = 'idle' | 'searching' | 'verifying' | 'done';
 
@@ -22,6 +23,7 @@ export default function Home() {
   const [answer, setAnswer] = useState('');
   const [citations, setCitations] = useState<string[]>([]);
   const [verifyResults, setVerifyResults] = useState<VerifyResult[]>([]);
+  const [gate, setGate] = useState<AcceptanceGateReport | null>(null);
   const [error, setError] = useState('');
 
   async function handleSearch(q: string) {
@@ -29,6 +31,7 @@ export default function Home() {
     setAnswer('');
     setCitations([]);
     setVerifyResults([]);
+    setGate(null);
     setError('');
     setStage('searching');
 
@@ -52,6 +55,7 @@ export default function Home() {
       });
       const verifyData = await verifyRes.json();
       setVerifyResults(verifyData.results ?? []);
+      setGate(verifyData.gate ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong');
     } finally {
@@ -159,7 +163,10 @@ export default function Home() {
 
                 {/* Answer + sidebar */}
                 <div className="flex gap-8">
-                  <AnswerPanel answer={answer} verifyResults={verifyResults} verifying={stage === 'verifying'} />
+                  <div className="flex-1 min-w-0 space-y-6">
+                    <AcceptanceGate gate={gate} verifying={stage === 'verifying'} />
+                    <AnswerPanel answer={answer} verifyResults={verifyResults} verifying={stage === 'verifying'} />
+                  </div>
                   {citations.length > 0 && (
                     <SourcesSidebar citations={citations} verifyResults={verifyResults} verifying={stage === 'verifying'} />
                   )}

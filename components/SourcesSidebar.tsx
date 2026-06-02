@@ -1,6 +1,6 @@
 'use client';
 
-import type { VerifyResult } from '@/app/api/verify/route';
+import type { VerifyResult } from '@/lib/truthlayer';
 
 interface Props {
   citations: string[];
@@ -56,7 +56,11 @@ export default function SourcesSidebar({ citations, verifyResults, verifying }: 
               {/* Favicon + host */}
               <div className="flex items-center gap-1.5 min-w-0 flex-1">
                 {favicon && (
-                  <img src={favicon} alt="" className="w-3.5 h-3.5 rounded-sm shrink-0 opacity-80" />
+                  <span
+                    aria-hidden="true"
+                    className="w-3.5 h-3.5 rounded-sm shrink-0 opacity-80 bg-center bg-cover"
+                    style={{ backgroundImage: `url(${favicon})` }}
+                  />
                 )}
                 <span className="text-[#8b8fa8] group-hover:text-gray-300 truncate transition-colors">{host}</span>
               </div>

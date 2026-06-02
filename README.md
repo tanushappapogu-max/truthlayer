@@ -1,15 +1,14 @@
 # TruthLayer
 
-**A citation verification engine for AI-generated answers.**
+**A calibrated acceptance gate for citation hallucination in AI search.**
 
+LLMs hallucinate citations. They return real URLs attached to claims those sources never actually make — the link exists, the information doesn't. TruthLayer intercepts answers from Perplexity's Sonar API and runs each cited claim through a multi-stage groundedness detector before it reaches the user. Verified claims pass through. Unsupported ones get flagged with what the source actually says, which detector signals fired, and a corrected rewrite grounded only in the source text.
 
-LLMs hallucinate citations. They return real URLs attached to claims those sources never actually make - the link exists, the information doesn't. TruthLayer intercepts answers from Perplexity's Sonar API and runs each cited claim through a groundedness check before it reaches the user. Verified claims pass through. Unsupported ones get flagged with what the source actually says and a corrected rewrite grounded only in the source text.
-
-Think of it as spell check, but for citations.
+An answer-level acceptance gate then makes a ship/don't-ship decision: **ACCEPT**, **REVISE**, **REJECT**, or **ABSTAIN**.
 
 ---
 
-## How It Works
+## Architecture
 
 ```
 User query
@@ -18,51 +17,80 @@ User query
 Perplexity Sonar API ──► answer + citation URLs
     │
     ▼
-TruthLayer Verification Engine
+TruthLayer 3-Stage Pipeline
     │
-    ├── fetch source text (Wikipedia REST API / HTML)
-    ├── extract claim per citation
-    └── LLM-as-judge: does this source support this claim?
-            │
-            ├── ✅ SUPPORTED  - passes through
-            ├── 🔴 UNSUPPORTED - flagged + corrected rewrite
-            └── 🟡 UNREACHABLE - source blocked or unavailable
+    ├── Stage 1: Deterministic Detector
+    │       ├── lexical overlap (5-gram)
+    │       ├── evidence coverage
+    │       ├── numeric/date contradiction
+    │       ├── semantic contrast pairs
+    │       ├── relation mismatch
+    │       ├── entity substitution
+    │       ├── hedging/certainty mismatch
+    │       └── quote verbatim match
     │
-    ▼
-Verified answer rendered inline
+    ├── Stage 2: NLI Cross-Encoder (optional)
+    │       └── cross-encoder/nli-deberta-v3-base
+    │
+    ├── Stage 3: LLM Judge (fallback)
+    │       └── Llama 3.1 8B via OpenRouter / Perplexity Sonar
+    │
+    └── Acceptance Gate
+            ├── ACCEPT  — all cited claims supported, score ≥ 0.82
+            ├── REVISE  — mismatch found, below reject threshold
+            ├── REJECT  — high-confidence contradiction (≥ 0.78)
+            └── ABSTAIN — too little source evidence (>25% unresolved)
 ```
 
-The verification prompt forces the judge model to respond only from source text - no training knowledge, no interpolation. Corrections are rewritten using only what the source explicitly states.
+The pipeline is staged so cheap deterministic checks resolve clear cases before any API call. Each stage adds signals to an inspectable detector report.
+
+---
+
+## Hallucination Taxonomy
+
+| Failure Mode | Example | Detector Signal |
+|---|---|---|
+| Entity substitution | "directed by Spielberg" → source says "directed by Jackson" | `ENTITY_SUBSTITUTION`, `RELATION_CONTRADICTION` |
+| Numeric drift | "population 200,000" → source says "145,170" | `NUMERIC_CONTRADICTION` |
+| Relation inversion | "public university" → source says "private" | `CONTRAST_CONTRADICTION` |
+| Hedging escalation | "always improves" → source says "may improve" | `HEDGING_MISMATCH` |
+| Irrelevant citation | Claim about Python (language) → source about Python (snake) | `EVIDENCE_COVERAGE` |
+| Source access failure | URL returns 403/timeout | `SOURCE_RETRIEVAL` |
+
+---
+
+## Evaluation Suite
+
+The `/benchmark` page runs **1,036 labeled claim/source pairs** (FEVER + adversarial) and reports:
+
+| Metric | Description |
+|---|---|
+| Accuracy | Overall correctness on decided cases |
+| Precision | Of flagged claims, fraction actually wrong |
+| Recall | Of wrong claims, fraction caught |
+| F1 | Harmonic mean |
+| **False Accept Rate** | Fraction of hallucinations the gate lets through |
+| False Reject Rate | Fraction of true claims incorrectly blocked |
+| Abstention Rate | Fraction unresolvable |
+| ECE | Expected Calibration Error |
+
+### Analysis tools:
+- **Confusion matrix** — TP/FP/FN/TN visualization
+- **Threshold sweep** — precision/recall/F1 curves across confidence thresholds
+- **Per-signal ablation** — disable any detector signal to measure its contribution
+- **Gold trace** — inspect the full pipeline for any individual case
+- **JSONL export** — reproducible results for external analysis
 
 ---
 
 ## Stack
 
-- **Next.js 14** (App Router)
+- **Next.js 16** (App Router)
 - **Tailwind CSS**
-- **Perplexity Sonar API** - both the answer generation and the verification judge run on the same model, keeping the system self-contained on one infrastructure stack
-- **Wikipedia REST API** - clean text extraction for Wikipedia citations without HTML scraping
-
----
-
-## Features
-
-- **Inline citation badges** - every `[1]`, `[2]` in the answer gets a live status badge post-verification
-- **Click-to-inspect** - click any 🔴 badge to see what the source actually says vs. what was claimed, plus the corrected version
-- **Sources sidebar** - color-coded by verification status (green / red / yellow)
-- **Benchmark runner** - `/benchmark` runs 10 labeled claim/source pairs (5 faithful, 5 hallucinated) and reports precision, recall, and F1
-
----
-
-## Benchmark
-
-The `/benchmark` page evaluates the verification engine against a curated set of claim/source pairs with known ground truth labels. Each run reports:
-
-| Metric | Definition |
-|---|---|
-| **Precision** | Of all flagged claims, what fraction were actually wrong |
-| **Recall** | Of all wrong claims, what fraction did the engine catch |
-| **F1** | Harmonic mean of precision and recall |
+- **Perplexity Sonar API** — answer generation + optional judge
+- **OpenRouter** — free LLM judge tier
+- **Wikipedia REST API** — clean text extraction
+- **HuggingFace Inference API** — NLI cross-encoder (optional)
 
 ---
 
@@ -78,21 +106,33 @@ Create `.env.local`:
 
 ```
 PERPLEXITY_API_KEY=your_key_here
+
+# Optional — enables NLI stage
+HUGGINGFACE_API_KEY=your_key_here
+
+# Optional — enables free LLM judge
+OPENROUTER_API_KEY=your_key_here
 ```
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) for the main interface and [http://localhost:3000/benchmark](http://localhost:3000/benchmark) for the benchmark runner.
+- Main interface: [http://localhost:3000](http://localhost:3000)
+- Benchmark suite: [http://localhost:3000/benchmark](http://localhost:3000/benchmark)
 
 A Perplexity API key is required. Get one at [perplexity.ai/settings/api](https://perplexity.ai/settings/api).
 
 ---
 
-## Motivation
+## Research Brief
 
-LLM-powered search products cite sources as a trust signal. When the attribution is wrong, users are misled by the appearance of rigor rather than the presence of it. This project explores what a lightweight, pipeline-compatible groundedness layer looks like in practice - something that could run before an answer is served rather than as a post-hoc audit tool.
+See [docs/research-brief.md](docs/research-brief.md) for the full research writeup including:
+- Problem statement and hallucination taxonomy
+- Detector signal weights and thresholds
+- Evaluation methodology
+- Relation to prior work (FEVER, FActScore, SAFE, Minicheck)
+- Reproducibility format
 
 ---
 

@@ -5998,5 +5998,257 @@
     "url": "https://en.wikipedia.org/wiki/How_to_Train_Your_Dragon_2",
     "expected": "UNSUPPORTED",
     "evidence": "How to Train Your Dragon 2 benefited from advances in animation technology and was DreamWorks ' first film to use scalable multicore processing and the studio 's new animation and lighting software ."
+  },
+  {
+    "claim": "The Lord of the Rings was directed by Steven Spielberg.",
+    "url": "https://en.wikipedia.org/wiki/The_Lord_of_the_Rings_(film_series)",
+    "expected": "UNSUPPORTED",
+    "evidence": "The Lord of the Rings is a series of three epic fantasy adventure films directed by Peter Jackson.",
+    "category": "entity-swap"
+  },
+  {
+    "claim": "Amazon was founded by Bill Gates.",
+    "url": "https://en.wikipedia.org/wiki/Amazon_(company)",
+    "expected": "UNSUPPORTED",
+    "evidence": "Amazon.com, Inc. was founded by Jeff Bezos from his garage in Bellevue, Washington, on July 5, 1994.",
+    "category": "entity-swap"
+  },
+  {
+    "claim": "The theory of general relativity was developed by Niels Bohr.",
+    "url": "https://en.wikipedia.org/wiki/General_relativity",
+    "expected": "UNSUPPORTED",
+    "evidence": "General relativity is a theory of gravitation that was developed by Albert Einstein between 1907 and 1915.",
+    "category": "entity-swap"
+  },
+  {
+    "claim": "Tesla was founded by Elon Musk in 2003.",
+    "url": "https://en.wikipedia.org/wiki/Tesla,_Inc.",
+    "expected": "UNSUPPORTED",
+    "evidence": "Tesla, Inc. was incorporated on July 1, 2003, by Martin Eberhard and Marc Tarpenning as Tesla Motors.",
+    "category": "entity-swap"
+  },
+  {
+    "claim": "The Great Gatsby was written by Ernest Hemingway.",
+    "url": "https://en.wikipedia.org/wiki/The_Great_Gatsby",
+    "expected": "UNSUPPORTED",
+    "evidence": "The Great Gatsby is a 1925 novel by American writer F. Scott Fitzgerald.",
+    "category": "entity-swap"
+  },
+  {
+    "claim": "SpaceX was founded by Jeff Bezos.",
+    "url": "https://en.wikipedia.org/wiki/SpaceX",
+    "expected": "UNSUPPORTED",
+    "evidence": "Space Exploration Technologies Corp., commonly referred to as SpaceX, is an American spacecraft manufacturer, space launch provider, and satellite communications company headquartered in Hawthorne, California. The company was founded in 2002 by Elon Musk.",
+    "category": "entity-swap"
+  },
+  {
+    "claim": "Wikipedia was created by Mark Zuckerberg.",
+    "url": "https://en.wikipedia.org/wiki/Wikipedia",
+    "expected": "UNSUPPORTED",
+    "evidence": "Wikipedia was launched on January 15, 2001, by Jimmy Wales and Larry Sanger.",
+    "category": "entity-swap"
+  },
+  {
+    "claim": "The iPhone was invented by Samsung.",
+    "url": "https://en.wikipedia.org/wiki/IPhone",
+    "expected": "UNSUPPORTED",
+    "evidence": "iPhone is a line of smartphones produced by Apple Inc. that use Apple own iOS mobile operating system.",
+    "category": "entity-swap"
+  },
+  {
+    "claim": "World War II ended in 1943.",
+    "url": "https://en.wikipedia.org/wiki/World_War_II",
+    "expected": "UNSUPPORTED",
+    "evidence": "World War II or the Second World War was a global conflict that lasted from 1939 to 1945.",
+    "category": "number-swap"
+  },
+  {
+    "claim": "The United States declared independence in 1783.",
+    "url": "https://en.wikipedia.org/wiki/United_States_Declaration_of_Independence",
+    "expected": "UNSUPPORTED",
+    "evidence": "The United States Declaration of Independence was adopted by the Second Continental Congress on July 4, 1776.",
+    "category": "number-swap"
+  },
+  {
+    "claim": "Mount Everest is 6,848 meters tall.",
+    "url": "https://en.wikipedia.org/wiki/Mount_Everest",
+    "expected": "UNSUPPORTED",
+    "evidence": "Mount Everest is Earth highest mountain above sea level, located in the Mahalangur Himal sub-range. Its elevation of 8,849 metres was most recently established in 2020.",
+    "category": "number-swap"
+  },
+  {
+    "claim": "The human body has 312 bones.",
+    "url": "https://en.wikipedia.org/wiki/Human_skeleton",
+    "expected": "UNSUPPORTED",
+    "evidence": "The human skeleton of an adult consists of around 206 to 213 bones.",
+    "category": "number-swap"
+  },
+  {
+    "claim": "Earth is approximately 2.5 billion years old.",
+    "url": "https://en.wikipedia.org/wiki/Age_of_Earth",
+    "expected": "UNSUPPORTED",
+    "evidence": "The age of Earth is estimated to be 4.54 billion years.",
+    "category": "number-swap"
+  },
+  {
+    "claim": "The speed of light is approximately 200,000 kilometers per second.",
+    "url": "https://en.wikipedia.org/wiki/Speed_of_light",
+    "expected": "UNSUPPORTED",
+    "evidence": "The speed of light in vacuum, commonly denoted c, is a universal physical constant that is exactly equal to 299,792,458 metres per second.",
+    "category": "number-swap"
+  },
+  {
+    "claim": "The Moon is about 584,400 kilometers from Earth.",
+    "url": "https://en.wikipedia.org/wiki/Moon",
+    "expected": "UNSUPPORTED",
+    "evidence": "The Moon orbits Earth at an average distance of 384,400 km.",
+    "category": "number-swap"
+  },
+  {
+    "claim": "Bitcoin was created in 2011.",
+    "url": "https://en.wikipedia.org/wiki/Bitcoin",
+    "expected": "UNSUPPORTED",
+    "evidence": "Bitcoin was invented in 2008 by an unknown person or group of people using the name Satoshi Nakamoto. The currency began use in 2009.",
+    "category": "number-swap"
+  },
+  {
+    "claim": "MIT is a private university.",
+    "url": "https://en.wikipedia.org/wiki/Massachusetts_Institute_of_Technology",
+    "expected": "SUPPORTED",
+    "evidence": "The Massachusetts Institute of Technology is a private land-grant research university in Cambridge, Massachusetts.",
+    "category": "relation"
+  },
+  {
+    "claim": "Harvard is a public university.",
+    "url": "https://en.wikipedia.org/wiki/Harvard_University",
+    "expected": "UNSUPPORTED",
+    "evidence": "Harvard University is a private Ivy League research university in Cambridge, Massachusetts.",
+    "category": "relation"
+  },
+  {
+    "claim": "Japan has a decreasing population.",
+    "url": "https://en.wikipedia.org/wiki/Demographics_of_Japan",
+    "expected": "SUPPORTED",
+    "evidence": "Japan has a declining population due to sub-replacement fertility rates and minimal net immigration.",
+    "category": "relation"
+  },
+  {
+    "claim": "The Sahara Desert is the smallest desert in the world.",
+    "url": "https://en.wikipedia.org/wiki/Sahara",
+    "expected": "UNSUPPORTED",
+    "evidence": "The Sahara is the largest hot desert in the world and the third-largest desert overall.",
+    "category": "relation"
+  },
+  {
+    "claim": "The Pacific Ocean is the smallest ocean on Earth.",
+    "url": "https://en.wikipedia.org/wiki/Pacific_Ocean",
+    "expected": "UNSUPPORTED",
+    "evidence": "The Pacific Ocean is the largest and deepest of Earth oceanic divisions.",
+    "category": "relation"
+  },
+  {
+    "claim": "Russia is the smallest country in the world by area.",
+    "url": "https://en.wikipedia.org/wiki/Russia",
+    "expected": "UNSUPPORTED",
+    "evidence": "Russia is the largest country in the world by area, extending across eleven time zones.",
+    "category": "relation"
+  },
+  {
+    "claim": "Python is the most popular programming language.",
+    "url": "https://en.wikipedia.org/wiki/Pythonidae",
+    "expected": "UNSUPPORTED",
+    "evidence": "The Pythonidae, commonly known as pythons, are a family of nonvenomous snakes found in Africa, Asia, and Australia.",
+    "category": "irrelevant"
+  },
+  {
+    "claim": "Apple released the M1 chip in 2020.",
+    "url": "https://en.wikipedia.org/wiki/Apple",
+    "expected": "UNSUPPORTED",
+    "evidence": "An apple is a round, edible fruit produced by an apple tree. Apple trees are cultivated worldwide.",
+    "category": "irrelevant"
+  },
+  {
+    "claim": "Mercury is the closest planet to the Sun.",
+    "url": "https://en.wikipedia.org/wiki/Mercury_(element)",
+    "expected": "UNSUPPORTED",
+    "evidence": "Mercury is a chemical element with the symbol Hg and atomic number 80. It is a heavy, silvery d-block element.",
+    "category": "irrelevant"
+  },
+  {
+    "claim": "Java is widely used for enterprise applications.",
+    "url": "https://en.wikipedia.org/wiki/Java",
+    "expected": "UNSUPPORTED",
+    "evidence": "Java is an island of Indonesia, bordered by the Indian Ocean to the south and the Java Sea to the north.",
+    "category": "irrelevant"
+  },
+  {
+    "claim": "Coffee always improves cognitive performance.",
+    "url": "https://en.wikipedia.org/wiki/Health_effects_of_coffee",
+    "expected": "UNSUPPORTED",
+    "evidence": "Coffee consumption may reduce the risk of several diseases. Moderate coffee consumption is generally safe.",
+    "category": "hedging"
+  },
+  {
+    "claim": "Vaccines are completely without any side effects.",
+    "url": "https://en.wikipedia.org/wiki/Vaccine",
+    "expected": "UNSUPPORTED",
+    "evidence": "Vaccines can have side effects, many of which are mild. Serious side effects are rare.",
+    "category": "hedging"
+  },
+  {
+    "claim": "Every species of mushroom is safe to eat.",
+    "url": "https://en.wikipedia.org/wiki/Mushroom",
+    "expected": "UNSUPPORTED",
+    "evidence": "Some mushrooms are edible and are used in cooking. However, many species of mushrooms are poisonous and can cause serious harm.",
+    "category": "hedging"
+  },
+  {
+    "claim": "Exercise always prevents heart disease.",
+    "url": "https://en.wikipedia.org/wiki/Exercise",
+    "expected": "UNSUPPORTED",
+    "evidence": "Physical exercise is often recommended to reduce the risk of heart disease. Regular exercise is generally associated with a lower risk.",
+    "category": "hedging"
+  },
+  {
+    "claim": "The Eiffel Tower is located in Paris, France.",
+    "url": "https://en.wikipedia.org/wiki/Eiffel_Tower",
+    "expected": "SUPPORTED",
+    "evidence": "The Eiffel Tower is a wrought-iron lattice tower on the Champ de Mars in Paris, France.",
+    "category": "true-positive"
+  },
+  {
+    "claim": "Water boils at 100 degrees Celsius at standard pressure.",
+    "url": "https://en.wikipedia.org/wiki/Boiling_point",
+    "expected": "SUPPORTED",
+    "evidence": "The boiling point of a substance is the temperature at which it can change its state from a liquid to a gas. For water, this point is 100 degrees Celsius at standard atmospheric pressure.",
+    "category": "true-positive"
+  },
+  {
+    "claim": "The Great Wall of China is visible from space.",
+    "url": "https://en.wikipedia.org/wiki/Great_Wall_of_China",
+    "expected": "UNSUPPORTED",
+    "evidence": "The Great Wall of China is not visible from space with the naked eye under normal conditions, according to astronauts.",
+    "category": "common-myth"
+  },
+  {
+    "claim": "Albert Einstein won the Nobel Prize in Physics.",
+    "url": "https://en.wikipedia.org/wiki/Albert_Einstein",
+    "expected": "SUPPORTED",
+    "evidence": "Einstein received the Nobel Prize in Physics in 1921 for his discovery of the law of the photoelectric effect.",
+    "category": "true-positive"
+  },
+  {
+    "claim": "The Amazon River is located in South America.",
+    "url": "https://en.wikipedia.org/wiki/Amazon_River",
+    "expected": "SUPPORTED",
+    "evidence": "The Amazon River in South America is the largest river by discharge volume of water in the world.",
+    "category": "true-positive"
+  },
+  {
+    "claim": "Shakespeare wrote Romeo and Juliet.",
+    "url": "https://en.wikipedia.org/wiki/Romeo_and_Juliet",
+    "expected": "SUPPORTED",
+    "evidence": "Romeo and Juliet is a tragedy written by William Shakespeare early in his career.",
+    "category": "true-positive"
   }
 ]

@@ -1,7 +1,7 @@
 'use client';
 
 import CitationBadge from './CitationBadge';
-import type { VerifyResult } from '@/app/api/verify/route';
+import type { VerifyResult } from '@/lib/truthlayer';
 
 interface Props {
   answer: string;
