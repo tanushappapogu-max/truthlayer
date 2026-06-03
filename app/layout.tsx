@@ -13,8 +13,33 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TruthLayer — Citations Verified",
-  description: "Perplexity answers with every citation verified against its source.",
+  title: "TruthLayer — Citation Verification Engine",
+  description:
+    "A calibrated acceptance gate for citation hallucination in AI search. 3-stage detector pipeline with inspectable signals, answer-level gate decisions, and paper-grade evaluation.",
+  authors: [{ name: "Tanush Appapogu" }],
+  keywords: [
+    "hallucination detection",
+    "citation verification",
+    "AI search",
+    "fact-checking",
+    "NLI",
+    "acceptance gate",
+    "Perplexity",
+  ],
+  metadataBase: new URL("https://truthlayer.vercel.app"),
+  openGraph: {
+    title: "TruthLayer — Citation Verification Engine",
+    description:
+      "A calibrated acceptance gate for citation hallucination in AI search.",
+    siteName: "TruthLayer",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "TruthLayer",
+    description:
+      "A calibrated acceptance gate for citation hallucination in AI search.",
+  },
 };
 
 export default function RootLayout({
