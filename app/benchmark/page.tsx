@@ -28,7 +28,8 @@ interface BenchmarkResult extends BenchmarkCase {
   sourceExcerpt?: string;
 }
 
-const BATCH = 4;
+const BATCH = 2;
+const DEFAULT_CASE_LIMIT = 100;
 const PAGE_SIZE = 50;
 
 const ALL_SIGNALS: { name: SignalName; label: string }[] = [
@@ -38,6 +39,8 @@ const ALL_SIGNALS: { name: SignalName; label: string }[] = [
   { name: 'NUMERIC_CONTRADICTION', label: 'Numeric contradiction' },
   { name: 'CONTRAST_CONTRADICTION', label: 'Contrast contradiction' },
   { name: 'RELATION_CONTRADICTION', label: 'Relation mismatch' },
+  { name: 'NEGATION_CONTRADICTION', label: 'Negation mismatch' },
+  { name: 'TYPE_CONTRADICTION', label: 'Type mismatch' },
   { name: 'ENTITY_SUBSTITUTION', label: 'Entity substitution' },
   { name: 'HEDGING_MISMATCH', label: 'Hedging mismatch' },
   { name: 'QUOTE_MATCH', label: 'Quote match' },
@@ -403,11 +406,12 @@ export default function BenchmarkPage() {
     setFilter('all');
 
     let completed = 0;
-    const total = cases.length;
+    const runCases = cases.slice(0, DEFAULT_CASE_LIMIT);
+    const total = runCases.length;
 
     for (let i = 0; i < total; i += BATCH) {
       if (abortRef.current) break;
-      const batch = cases.slice(i, i + BATCH);
+      const batch = runCases.slice(i, i + BATCH);
 
       if (i > 0) await new Promise(r => setTimeout(r, 300));
 
@@ -513,7 +517,8 @@ export default function BenchmarkPage() {
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const pageItems = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-  const progressPct = cases.length > 0 ? (progress / cases.length) * 100 : 0;
+  const progressTotal = Math.min(cases.length, DEFAULT_CASE_LIMIT);
+  const progressPct = progressTotal > 0 ? (progress / progressTotal) * 100 : 0;
 
   const traceResult = traceId !== null ? allResults.find(r => r.id === traceId) ?? null : null;
 
@@ -560,7 +565,7 @@ export default function BenchmarkPage() {
               disabled={cases.length === 0 || !!loadError}
               className="px-5 py-2.5 rounded-xl bg-[#6366f1] hover:bg-[#5254cc] disabled:opacity-40 text-sm font-semibold transition-all hover:scale-105 active:scale-95"
             >
-              {done ? 'Re-run Benchmark' : `Run ${cases.length.toLocaleString()} Cases`}
+              {done ? 'Re-run Benchmark' : `Run ${Math.min(cases.length, DEFAULT_CASE_LIMIT).toLocaleString()} Cases`}
             </button>
           ) : (
             <button
@@ -581,10 +586,14 @@ export default function BenchmarkPage() {
           )}
           {(running || done) && (
             <span className="text-xs text-[#4a4e6a]">
-              {progress.toLocaleString()} / {cases.length.toLocaleString()} completed
+              {progress.toLocaleString()} / {Math.min(cases.length, DEFAULT_CASE_LIMIT).toLocaleString()} completed
             </span>
           )}
         </div>
+
+        <p className="text-[11px] text-[#4a4e6a] mb-5 -mt-3">
+          Local safety cap: runs the first {DEFAULT_CASE_LIMIT.toLocaleString()} of {cases.length.toLocaleString()} cases at {BATCH} concurrent requests.
+        </p>
 
         {/* Disabled signals (ablation) */}
         {!running && (
@@ -864,7 +873,7 @@ export default function BenchmarkPage() {
         {done && (
           <div className="mt-8 pt-4 border-t border-[#1e2030] text-[10px] text-[#4a4e6a] space-y-1">
             <p>TruthLayer gate v0.3 — 3-stage pipeline: deterministic detector → NLI cross-encoder → LLM judge</p>
-            <p>Signals: lexical overlap, evidence coverage, numeric contradiction, contrast contradiction, relation mismatch, entity substitution, hedging mismatch, quote match</p>
+            <p>Signals: lexical overlap, evidence coverage, numeric/date contradiction, semantic contrast, negation mismatch, relation mismatch, type mismatch, entity substitution, hedging mismatch, quote match</p>
             <p>Gate policy: REJECT at contradiction &ge; 0.78, ACCEPT at score &ge; 0.82 with all claims supported, ABSTAIN at &gt;25% unresolved</p>
           </div>
         )}

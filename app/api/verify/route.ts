@@ -7,6 +7,9 @@ import {
 } from '@/lib/truthlayer';
 import type { DetectorReport, DetectorSignal, VerifyResult } from '@/lib/truthlayer';
 
+const MAX_CITATIONS_PER_REQUEST = 8;
+const MAX_SOURCE_CHARS = 4000;
+
 // --- Source fetchers ---
 
 function isWikipediaUrl(url: string): boolean {
@@ -168,6 +171,8 @@ async function stage2NLI(
   claim: string,
   sourceText: string,
 ): Promise<{ verdict: 'SUPPORTED' | 'UNSUPPORTED'; confidence: number } | null> {
+  if (process.env.ENABLE_NLI_STAGE !== 'true') return null;
+
   const hfKey = process.env.HUGGINGFACE_API_KEY;
   if (!hfKey) return null;
 
@@ -305,6 +310,8 @@ async function stage3LLM(
   sourceText: string,
   perplexityKey?: string,
 ): Promise<{ status: 'SUPPORTED' | 'UNSUPPORTED' | 'UNVERIFIABLE'; sourceExcerpt?: string; corrected?: string }> {
+  if (process.env.ENABLE_LLM_JUDGE !== 'true') return { status: 'UNVERIFIABLE' };
+
   if (process.env.OPENROUTER_API_KEY) {
     try {
       return await judgeViaOpenRouter(claim, sourceText);
@@ -387,19 +394,37 @@ export async function POST(req: NextRequest) {
     if (claim) claimMap[i] = claim;
   }
 
-  const results = await Promise.all(
-    citations.map(async (url, i): Promise<VerifyResult> => {
+  const results: VerifyResult[] = [];
+
+  for (let i = 0; i < citations.length; i++) {
+    const url = citations[i];
+    if (i >= MAX_CITATIONS_PER_REQUEST) {
+      results.push({
+        index: i,
+        url,
+        status: 'UNVERIFIABLE',
+        sourceExcerpt: `Skipped by local safety cap (${MAX_CITATIONS_PER_REQUEST} citations per request).`,
+      });
+      continue;
+    }
+
       const claim = claimMap[i];
-      if (!claim?.trim()) return { index: i, url, status: 'UNVERIFIABLE' };
+      if (!claim?.trim()) {
+        results.push({ index: i, url, status: 'UNVERIFIABLE' });
+        continue;
+      }
 
       const { pageText, serperText } = await fetchPageText(url, claim);
 
       const parts: string[] = [];
-      if (pageText) parts.push(`--- SOURCE (${url}) ---\n${pageText.slice(0, 4000)}`);
+      if (pageText) parts.push(`--- SOURCE (${url}) ---\n${pageText.slice(0, MAX_SOURCE_CHARS)}`);
       if (serperText) parts.push(`--- WEB SEARCH ---\n${serperText}`);
       const sourceText = parts.join('\n\n') || null;
 
-      if (!sourceText) return { index: i, url, claim, status: 'UNREACHABLE' };
+      if (!sourceText) {
+        results.push({ index: i, url, claim, status: 'UNREACHABLE' });
+        continue;
+      }
 
       try {
         const atomicClaims = decomposeClaimAtomics(claim);
@@ -411,18 +436,17 @@ export async function POST(req: NextRequest) {
           result = { ...result, signals: filteredSignals };
         }
 
-        return { index: i, url, claim, atomicClaims: atomicClaims.length > 1 ? atomicClaims : undefined, ...result };
+        results.push({ index: i, url, claim, atomicClaims: atomicClaims.length > 1 ? atomicClaims : undefined, ...result });
       } catch {
-        return {
+        results.push({
           index: i,
           url,
           claim,
           status: 'UNVERIFIABLE',
           sourceExcerpt: sourceText.slice(0, 240),
-        };
+        });
       }
-    })
-  );
+  }
 
   const gate = buildAcceptanceGate(results);
   return NextResponse.json({ results, gate });

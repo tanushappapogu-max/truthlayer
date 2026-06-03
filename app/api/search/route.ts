@@ -1,5 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+function cleanProviderError(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw);
+    const message = parsed?.error?.message ?? parsed?.message;
+    const code = parsed?.error?.code ?? parsed?.code;
+
+    if (code === 401 || code === '401' || String(message).toLowerCase().includes('quota')) {
+      return 'Perplexity API quota exceeded. Add billing or use a different PERPLEXITY_API_KEY in .env.local.';
+    }
+
+    if (message) return String(message);
+  } catch {
+    // Fall through to the plain-text response.
+  }
+
+  return raw || 'Search provider request failed.';
+}
+
 export async function POST(req: NextRequest) {
   const { query } = await req.json();
 
@@ -23,7 +41,7 @@ export async function POST(req: NextRequest) {
 
   if (!res.ok) {
     const err = await res.text();
-    return NextResponse.json({ error: err }, { status: res.status });
+    return NextResponse.json({ error: cleanProviderError(err) }, { status: res.status });
   }
 
   const data = await res.json();

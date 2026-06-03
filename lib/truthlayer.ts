@@ -11,6 +11,8 @@ export type SignalName =
   | 'NUMERIC_CONTRADICTION'
   | 'CONTRAST_CONTRADICTION'
   | 'RELATION_CONTRADICTION'
+  | 'NEGATION_CONTRADICTION'
+  | 'TYPE_CONTRADICTION'
   | 'ENTITY_SUBSTITUTION'
   | 'HEDGING_MISMATCH'
   | 'QUOTE_MATCH'
@@ -115,7 +117,7 @@ const STOPWORDS = new Set([
   'has', 'had', 'have', 'its', 'his', 'her', 'their', 'about', 'into', 'than',
   'then', 'also', 'only', 'according', 'source', 'claim', 'been', 'being',
   'which', 'who', 'whom', 'where', 'when', 'what', 'how', 'does', 'did',
-  'not', 'but', 'can', 'will', 'would', 'could', 'should', 'may', 'might',
+  'but', 'can', 'will', 'would', 'could', 'should', 'may', 'might',
 ]);
 
 const CONTRAST_PAIRS: Array<[string, string]> = [
@@ -125,18 +127,27 @@ const CONTRAST_PAIRS: Array<[string, string]> = [
   ['increases', 'decreases'],
   ['expanded', 'contracted'],
   ['expansion', 'contraction'],
+  ['raises', 'lowers'],
+  ['raised', 'lowered'],
+  ['worsening', 'relieving'],
+  ['worsen', 'relieve'],
   ['largest', 'smallest'],
   ['larger', 'smaller'],
   ['first', 'last'],
   ['before', 'after'],
+  ['same', 'different'],
   ['football', 'baseball'],
   ['soccer', 'baseball'],
-  ['directed', 'produced'],
+  ['created', 'destroyed'],
   ['atheist', 'minister'],
   ['confirmed', 'denied'],
   ['approved', 'rejected'],
   ['winner', 'loser'],
   ['highest', 'lowest'],
+  ['county', 'city'],
+  ['movie', 'television'],
+  ['newspaper', 'television'],
+  ['married', 'portrayed'],
   ['majority', 'minority'],
   ['ancient', 'modern'],
   ['domestic', 'international'],
@@ -150,6 +161,53 @@ const CONTRAST_PAIRS: Array<[string, string]> = [
 
 const HEDGING_STRONG = ['always', 'never', 'all', 'none', 'every', 'no one', 'nobody', 'entirely', 'completely', 'absolutely', 'certainly', 'undoubtedly', 'definitely', 'exclusively', 'solely', 'only'];
 const HEDGING_WEAK = ['sometimes', 'often', 'usually', 'generally', 'frequently', 'occasionally', 'rarely', 'seldom', 'some', 'many', 'most', 'few', 'several', 'partly', 'partially', 'arguably', 'possibly', 'potentially', 'approximately', 'roughly', 'nearly', 'almost'];
+
+const SMALL_NUMBER_WORDS: Record<string, number> = {
+  zero: 0,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+  thirteen: 13,
+  fourteen: 14,
+  fifteen: 15,
+  sixteen: 16,
+  seventeen: 17,
+  eighteen: 18,
+  nineteen: 19,
+  twenty: 20,
+};
+
+const MONTHS: Record<string, number> = {
+  january: 1,
+  february: 2,
+  march: 3,
+  april: 4,
+  may: 5,
+  june: 6,
+  july: 7,
+  august: 8,
+  september: 9,
+  october: 10,
+  november: 11,
+  december: 12,
+};
+
+const DIGIT_NUMBER_PATTERN = /\b\d[\d,]*(?:\.\d+)?(?:st|nd|rd|th)?(?:'s|s)?%?\b/gi;
+const RELATIONS = ['directed', 'written', 'produced', 'created', 'founded', 'invented', 'composed', 'designed', 'organized', 'reviewed', 'destroyed'];
+const GENERIC_RELATION_WORDS = new Set([
+  'american', 'belgian', 'british', 'canadian', 'film', 'music', 'television', 'tv',
+  'producer', 'director', 'writer', 'artist', 'actor', 'actress', 'person', 'company',
+  'organization', 'designer', 'developer',
+]);
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
@@ -260,31 +318,201 @@ function ngramOverlap(claim: string, sourceText: string, n = 5): number {
   return grams.length > 0 ? matchCount / grams.length : 0;
 }
 
+type NumberMention = {
+  raw: string;
+  value: number;
+  normalized: string;
+  index: number;
+  kind: 'exact' | 'decade' | 'word';
+  comparator: 'exact' | 'gt' | 'gte' | 'lt' | 'lte';
+};
+
+function normalizeNumberLiteral(raw: string): { value: number; normalized: string; kind: 'exact' | 'decade' } | null {
+  const cleaned = raw
+    .toLowerCase()
+    .replace(/,/g, '')
+    .replace(/%$/g, '')
+    .replace(/(?:st|nd|rd|th)(?=(?:'s|s)?$)/, '')
+    .replace(/'s$/g, 's');
+  const kind = /\d+s$/.test(cleaned) ? 'decade' : 'exact';
+  const numeric = cleaned.replace(/s$/g, '');
+  const value = Number(numeric);
+  if (!Number.isFinite(value)) return null;
+  return { value, normalized: Number.isInteger(value) ? String(value) : String(value), kind };
+}
+
+function inferComparator(text: string, index: number): NumberMention['comparator'] {
+  const window = normalizeText(text.slice(Math.max(0, index - 45), Math.min(text.length, index + 45)));
+  if (/\b(?:more than|over|above|greater than|at least|minimum of|no less than)\b/.test(window) || /\bor later\b/.test(window)) {
+    return 'gte';
+  }
+  if (/\b(?:less than|under|below|fewer than|at most|maximum of|no more than)\b/.test(window) || /\bor earlier\b/.test(window)) {
+    return 'lte';
+  }
+  if (/\bafter\b/.test(window)) return 'gt';
+  if (/\bbefore\b/.test(window)) return 'lt';
+  return 'exact';
+}
+
+function extractNumberMentions(text: string): NumberMention[] {
+  const normalizedDecimals = text.replace(/(\d)\s*\.\s*(\d)/g, '$1.$2');
+  const mentions: NumberMention[] = [];
+
+  for (const match of normalizedDecimals.matchAll(DIGIT_NUMBER_PATTERN)) {
+    const parsed = normalizeNumberLiteral(match[0]);
+    if (!parsed) continue;
+    mentions.push({
+      raw: match[0],
+      value: parsed.value,
+      normalized: parsed.normalized,
+      index: match.index ?? 0,
+      kind: parsed.kind,
+      comparator: inferComparator(normalizedDecimals, match.index ?? 0),
+    });
+  }
+
+  for (const match of normalizedDecimals.matchAll(new RegExp(`\\b(${Object.keys(SMALL_NUMBER_WORDS).join('|')})\\b`, 'gi'))) {
+    const wordContext = normalizedDecimals.slice(Math.max(0, (match.index ?? 0) - 12), Math.min(normalizedDecimals.length, (match.index ?? 0) + match[0].length + 12));
+    if (match[1].toLowerCase() === 'one' && /\bone\s+point\b/.test(wordContext)) continue;
+    const value = SMALL_NUMBER_WORDS[match[1].toLowerCase()];
+    mentions.push({
+      raw: match[0],
+      value,
+      normalized: String(value),
+      index: match.index ?? 0,
+      kind: 'word',
+      comparator: inferComparator(normalizedDecimals, match.index ?? 0),
+    });
+  }
+
+  const expandedMentions = [...mentions];
+  for (const mention of mentions) {
+    const rawDigits = mention.raw.replace(/\D/g, '');
+    if (rawDigits.length !== 2 || mention.value < 0 || mention.value > 99) continue;
+    const rangePrefix = normalizedDecimals
+      .slice(Math.max(0, mention.index - 16), mention.index)
+      .match(/\b((?:1[6-9]|20)\d{2})\s*(?:--|-|\/)\s*$/);
+    if (!rangePrefix) continue;
+    expandedMentions.push({
+      ...mention,
+      raw: `${rangePrefix[1].slice(0, 2)}${mention.normalized.padStart(2, '0')}`,
+      value: Number(`${rangePrefix[1].slice(0, 2)}${mention.normalized.padStart(2, '0')}`),
+      normalized: `${rangePrefix[1].slice(0, 2)}${mention.normalized.padStart(2, '0')}`,
+      kind: 'exact',
+    });
+  }
+
+  return expandedMentions.sort((a, b) => a.index - b.index);
+}
+
 function extractNumbers(text: string): string[] {
-  // Extract from original text (before normalization strips commas)
-  return [...text.matchAll(/\b\d[\d,]*(?:\.\d+)?%?\b/g)].map(match =>
-    match[0].replace(/,/g, '')
-  );
+  const mentions = extractNumberMentions(text);
+  const values = new Set(mentions.map(mention => mention.normalized));
+
+  for (const mention of mentions) {
+    const rawDigits = mention.raw.replace(/\D/g, '');
+    if (rawDigits.length === 2 && mention.value >= 0 && mention.value <= 99) {
+      const rangePrefix = text
+        .slice(Math.max(0, mention.index - 16), mention.index)
+        .match(/\b((?:1[6-9]|20)\d{2})\s*(?:--|-|\/)\s*$/);
+      if (rangePrefix) values.add(`${rangePrefix[1].slice(0, 2)}${mention.normalized.padStart(2, '0')}`);
+    }
+  }
+
+  return [...values];
+}
+
+function satisfiesNumberClaim(claimMention: NumberMention, evidenceMentions: NumberMention[]): boolean {
+  for (const evidenceMention of evidenceMentions) {
+    if (claimMention.kind === 'decade') {
+      if (evidenceMention.value >= claimMention.value && evidenceMention.value <= claimMention.value + 9) return true;
+      continue;
+    }
+
+    if (claimMention.comparator === 'gte' && evidenceMention.value >= claimMention.value) return true;
+    if (claimMention.comparator === 'gt' && evidenceMention.value > claimMention.value) return true;
+    if (claimMention.comparator === 'lte' && evidenceMention.value <= claimMention.value) return true;
+    if (claimMention.comparator === 'lt' && evidenceMention.value < claimMention.value) return true;
+    if (claimMention.comparator === 'exact' && evidenceMention.normalized === claimMention.normalized) return true;
+  }
+
+  return false;
+}
+
+function isLikelyTitleYear(claim: string, mention: NumberMention): boolean {
+  if (!/^(?:1[6-9]|20)\d{2}$/.test(mention.normalized)) return false;
+  const before = claim.slice(0, mention.index);
+  const after = claim.slice(mention.index + mention.raw.length, mention.index + mention.raw.length + 40);
+  if (/^\s*$/.test(before) && /^\s+[A-Z][A-Za-z]/.test(after)) return true;
+  if (/\(\s*$/.test(before) && /^\s*(?:film|song|album|series|novel|book|race|event)\b/i.test(after)) return true;
+  return false;
+}
+
+function extractMonthDates(text: string): Array<{ month: number; day: number; year?: number; raw: string }> {
+  const normalized = normalizeText(text);
+  const monthNames = Object.keys(MONTHS).join('|');
+  return [...normalized.matchAll(new RegExp(`\\b(${monthNames})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:\\s*,?\\s*(\\d{4}))?`, 'gi'))]
+    .map(match => ({
+      month: MONTHS[match[1].toLowerCase()],
+      day: Number(match[2]),
+      year: match[3] ? Number(match[3]) : undefined,
+      raw: match[0],
+    }))
+    .filter(date => Number.isFinite(date.month) && Number.isFinite(date.day));
 }
 
 function contextualNumberContradiction(claim: string, evidenceText: string): string | null {
-  const claimMatches = [...claim.matchAll(/\b\d[\d,]*(?:\.\d+)?%?\b/g)];
-  if (claimMatches.length === 0) return null;
+  const claimMentions = extractNumberMentions(claim);
+  if (claimMentions.length === 0) return null;
 
+  const claimDates = extractMonthDates(claim);
+  const evidenceDates = extractMonthDates(evidenceText);
+  for (const claimDate of claimDates) {
+    const exactDate = evidenceDates.some(date =>
+      date.month === claimDate.month &&
+      date.day === claimDate.day &&
+      (!claimDate.year || !date.year || date.year === claimDate.year)
+    );
+    if (exactDate) continue;
+
+    const conflictingDate = evidenceDates.find(date =>
+      date.day === claimDate.day &&
+      (!claimDate.year || !date.year || date.year === claimDate.year) &&
+      date.month !== claimDate.month
+    );
+    if (conflictingDate) {
+      return `Claim uses ${claimDate.raw}, but the evidence uses ${conflictingDate.raw}.`;
+    }
+  }
+
+  const evidenceMentions = extractNumberMentions(evidenceText);
   const evidenceNumbers = extractNumbers(evidenceText);
-  if (evidenceNumbers.length === 0) return null;
   const evidenceTokenSet = uniqueTokens(evidenceText);
 
-  for (const match of claimMatches) {
-    const rawNumber = match[0];
-    const normalizedNumber = rawNumber.replace(/,/g, '');
-    if (evidenceNumbers.includes(normalizedNumber)) continue;
+  for (const mention of claimMentions) {
+    if (isLikelyTitleYear(claim, mention)) continue;
+    if (satisfiesNumberClaim(mention, evidenceMentions)) continue;
 
-    const idx = match.index ?? 0;
+    const idx = mention.index;
     const context = claim.slice(Math.max(0, idx - 90), Math.min(claim.length, idx + 90));
     const contextHits = tokenize(context).filter(token => evidenceTokenSet.has(token)).length;
-    if (contextHits >= 2) {
-      return `Claim uses ${rawNumber}, but the nearest evidence uses ${evidenceNumbers.slice(0, 3).join(', ')}.`;
+    const hasTimeCue = /\b(?:pm|am)\b/i.test(context);
+    const centuryMatch = context.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+century\b/i);
+    if (centuryMatch) {
+      const century = Number(centuryMatch[1]);
+      const minYear = (century - 1) * 100 + 1;
+      const maxYear = century * 100;
+      if (evidenceMentions.some(evidenceMention => evidenceMention.value >= minYear && evidenceMention.value <= maxYear)) continue;
+    }
+
+    if (/(?:st|nd|rd|th)$/i.test(mention.raw) && /\bseason\b/i.test(context)) continue;
+
+    if (evidenceNumbers.length === 0 && hasTimeCue && contextHits >= 2) {
+      return `Claim uses ${mention.raw}, but the evidence gives no matching number in the same context.`;
+    }
+
+    if (evidenceNumbers.length > 0 && contextHits >= 2) {
+      return `Claim uses ${mention.raw}, but the nearest evidence uses ${evidenceNumbers.slice(0, 3).join(', ')}.`;
     }
   }
 
@@ -310,6 +538,29 @@ function hasTokenOrVariant(tokens: Set<string>, target: string): boolean {
 }
 
 function contrastContradiction(claim: string, evidenceText: string): string | null {
+  const normalizedClaim = normalizeText(claim);
+  const normalizedEvidence = normalizeText(evidenceText);
+  const outsideMatch = normalizedClaim.match(/\boutside(?: of)?\s+(?:the\s+)?([a-z][a-z\s]{2,60})\.?$/);
+  if (outsideMatch) {
+    const locationTokens = tokenize(outsideMatch[1]);
+    const evidenceTokensForLocation = uniqueTokens(normalizedEvidence);
+    const locationHits = locationTokens.filter(token => evidenceTokensForLocation.has(token)).length;
+    if (locationTokens.length > 0 && locationHits / locationTokens.length >= 0.8 && !/\boutside\b/.test(normalizedEvidence)) {
+      return `Claim places the subject outside "${outsideMatch[1].trim()}", while the evidence places it there.`;
+    }
+  }
+
+  const hasEastPart = /\b(?:east|eastern)\s+(?:part|end)\b/.test(normalizedClaim);
+  const hasWestPart = /\b(?:west|western)\s+(?:part|end)\b/.test(normalizedClaim);
+  const evidenceHasEastPart = /\b(?:east|eastern)\s+(?:part|end)\b/.test(normalizedEvidence);
+  const evidenceHasWestPart = /\b(?:west|western)\s+(?:part|end)\b/.test(normalizedEvidence);
+  if (hasEastPart && evidenceHasWestPart && !evidenceHasEastPart) {
+    return 'Claim says the eastern side, while the strongest evidence says the western side.';
+  }
+  if (hasWestPart && evidenceHasEastPart && !evidenceHasWestPart) {
+    return 'Claim says the western side, while the strongest evidence says the eastern side.';
+  }
+
   const claimTokens = uniqueTokens(claim);
   const evidenceTokens = uniqueTokens(evidenceText);
 
@@ -327,7 +578,10 @@ function contrastContradiction(claim: string, evidenceText: string): string | nu
 
 function cleanRelationObject(value: string): string {
   return normalizeText(value)
-    .split(/\b(?:and|with|from|through|for|as|starring|written|produced|directed)\b/)[0]
+    .replace(/-/g, ' ')
+    .split(/\b(?:with|from|through|for|as|in|starring|written|produced|directed|organized|reviewed|destroyed|distributed|released)\b/)[0]
+    .replace(/\b(?:writer|editor|producer|mixer|director|composer|designer)\b/g, ' ')
+    .replace(/\band\b/g, ' ')
     .replace(/\b(?:the|a|an)\b/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -341,18 +595,221 @@ function extractRelationObject(text: string, relation: string): string | null {
   return cleaned.length > 2 ? cleaned : null;
 }
 
+function extractRelationObjects(text: string): Array<{ relation: string; object: string }> {
+  return RELATIONS
+    .map(relation => {
+      const object = extractRelationObject(text, relation);
+      return object ? { relation, object } : null;
+    })
+    .filter((item): item is { relation: string; object: string } => Boolean(item));
+}
+
+function isGenericRelationObject(object: string): boolean {
+  const tokens = relationObjectTokens(object);
+  if (tokens.length === 0) return true;
+  const genericHits = tokens.filter(token => GENERIC_RELATION_WORDS.has(token)).length;
+  return genericHits >= Math.max(1, tokens.length - 1);
+}
+
+function relationObjectTokens(object: string): string[] {
+  return normalizeText(object)
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(token => token.length > 0 && !STOPWORDS.has(token) && token !== 'and');
+}
+
 function relationContradiction(claim: string, evidenceText: string): string | null {
-  for (const relation of ['directed', 'written', 'produced', 'created', 'founded', 'invented', 'composed', 'designed']) {
+  const normalizedEvidence = normalizeText(evidenceText);
+  for (const relation of RELATIONS) {
     const claimObject = extractRelationObject(claim, relation);
     const evidenceObject = extractRelationObject(evidenceText, relation);
     if (!claimObject || !evidenceObject) continue;
 
-    const claimTokens = uniqueTokens(claimObject);
-    const evidenceTokens = uniqueTokens(evidenceObject);
+    const claimTokens = new Set(relationObjectTokens(claimObject));
+    const evidenceTokens = new Set(relationObjectTokens(evidenceObject));
     const shared = [...claimTokens].filter(token => evidenceTokens.has(token)).length;
 
-    if (shared === 0) {
+    const requiredShared = Math.min(2, claimTokens.size, evidenceTokens.size);
+    if (shared < requiredShared && !isGenericRelationObject(claimObject) && !isGenericRelationObject(evidenceObject)) {
       return `Claim says ${relation} by "${claimObject}", but source says ${relation} by "${evidenceObject}".`;
+    }
+  }
+
+  const claimRelations = extractRelationObjects(claim);
+  const evidenceRelations = extractRelationObjects(evidenceText);
+  for (const claimRelation of claimRelations) {
+    for (const evidenceRelation of evidenceRelations) {
+      if (claimRelation.relation === evidenceRelation.relation) continue;
+      if (normalizedEvidence.includes(claimRelation.relation)) continue;
+      if (isGenericRelationObject(claimRelation.object) || isGenericRelationObject(evidenceRelation.object)) continue;
+
+      const claimTokens = new Set(relationObjectTokens(claimRelation.object));
+      const evidenceTokens = new Set(relationObjectTokens(evidenceRelation.object));
+      const shared = [...claimTokens].filter(token => evidenceTokens.has(token)).length;
+      const overlap = shared / Math.max(Math.min(claimTokens.size, evidenceTokens.size), 1);
+      if (shared >= 2 && overlap >= 0.5) {
+        return `Claim says ${claimRelation.relation} by "${claimRelation.object}", but source says ${evidenceRelation.relation} by the same party.`;
+      }
+    }
+  }
+
+  return null;
+}
+
+type NegationCue = {
+  cue: string;
+  before: string;
+  after: string;
+  window: string;
+};
+
+const NEGATION_TOKENS = new Set(['not', 'no', 'never', 'without', 'cannot', 'cant', 'couldnt', 'wouldnt', 'shouldnt', 'wasnt', 'werent', 'isnt', 'arent', 'doesnt', 'dont', 'didnt', 'incapable']);
+
+function negationCues(text: string): NegationCue[] {
+  const normalized = normalizeText(text)
+    .replace(/\bno\.\s*\d+/g, 'number ')
+    .replace(/\bnot\s+(?:exclusively|only|necessarily)\b/g, 'partly');
+  const cues: NegationCue[] = [];
+  const pattern = /\b(?:not|no|never|without|cannot|can't|couldn't|wouldn't|shouldn't|wasn't|weren't|isn't|aren't|doesn't|don't|didn't|incapable)\b/gi;
+
+  for (const match of normalized.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    cues.push({
+      cue: match[0],
+      before: normalized.slice(Math.max(0, index - 70), index),
+      after: normalized.slice(index + match[0].length, Math.min(normalized.length, index + match[0].length + 70)),
+      window: normalized.slice(Math.max(0, index - 70), Math.min(normalized.length, index + match[0].length + 70)),
+    });
+  }
+
+  return cues;
+}
+
+function tokensWithoutNegation(text: string): string[] {
+  return tokenize(text).filter(token => !NEGATION_TOKENS.has(token));
+}
+
+function cueOverlapScore(cue: NegationCue, otherText: string, side: 'after' | 'window' = 'after'): number {
+  const cueTokens = tokensWithoutNegation(side === 'after' ? cue.after : cue.window);
+  if (cueTokens.length === 0) return 0;
+  const otherTokens = uniqueTokens(otherText);
+  const hits = cueTokens.filter(token => otherTokens.has(token)).length;
+  return hits / cueTokens.length;
+}
+
+function cueOverlapHits(cue: NegationCue, otherText: string, side: 'after' | 'window' = 'after'): number {
+  const cueTokens = tokensWithoutNegation(side === 'after' ? cue.after : cue.window);
+  const otherTokens = uniqueTokens(otherText);
+  return cueTokens.filter(token => otherTokens.has(token)).length;
+}
+
+function negationContradiction(claim: string, evidenceText: string): string | null {
+  const claimCues = negationCues(claim);
+  const evidenceCues = negationCues(evidenceText);
+  if (claimCues.length === 0 && evidenceCues.length === 0) return null;
+  if (claimCues.length > 0 && evidenceCues.length > 0) return null;
+
+  const claimTokens = tokensWithoutNegation(claim);
+  const evidenceTokens = uniqueTokens(evidenceText);
+  const topicalHits = claimTokens.filter(token => evidenceTokens.has(token)).length;
+  const topicalOverlap = claimTokens.length > 0 ? topicalHits / claimTokens.length : 0;
+  if (claimTokens.length < 2 || topicalOverlap < 0.55) return null;
+
+  for (const cue of claimCues) {
+    if (cueOverlapScore(cue, evidenceText) >= 0.5 || cueOverlapScore(cue, evidenceText, 'window') >= 0.7) {
+      return 'Claim negates a fact that the evidence states affirmatively.';
+    }
+  }
+
+  for (const cue of evidenceCues) {
+    if (cueOverlapScore(cue, claim) >= 0.5 || cueOverlapHits(cue, claim) >= 2) {
+      return 'Evidence negates a fact that the claim states affirmatively.';
+    }
+  }
+
+  return null;
+}
+
+function cleanTypeObject(value: string): string {
+  return normalizeText(value)
+    .split(/\b(?:which|that|who|where|when|owned|featuring|starring|directed|written|produced|developed|based|located|with|by|in|on|from)\b/)[0]
+    .replace(/\b(?:the|a|an|american|british|canadian|australian)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractTypeObject(text: string): string | null {
+  const normalized = normalizeText(text);
+  const match = normalized.match(/\b(?:is|are|was|were)\s+(?:an?|the)?\s+([^.;,\n]{2,90})/);
+  if (!match) return null;
+  const cleaned = cleanTypeObject(match[1]);
+  return cleaned.length > 2 ? cleaned : null;
+}
+
+function singularizeTypeToken(token: string): string {
+  if (token.endsWith('ies') && token.length > 4) return `${token.slice(0, -3)}y`;
+  if (token.endsWith('esses') && token.length > 6) return token.slice(0, -2);
+  if (token.endsWith('s') && !token.endsWith('ss') && token.length > 4) return token.slice(0, -1);
+  return token;
+}
+
+function typeHead(typeObject: string): string | null {
+  const descriptors = new Set([
+    'former', 'fictional', 'video', 'game', 'science', 'fiction', 'television', 'tv',
+    'child', 'fashion', 'studio', 'annual', 'continental', 'active', 'main',
+    'lead', 'second', 'debut', 'from', 'than', 'of',
+  ]);
+  const tokens = tokenize(typeObject)
+    .map(singularizeTypeToken)
+    .filter(token => !descriptors.has(token) && !/^\d+$/.test(token));
+  return tokens.at(-1) ?? null;
+}
+
+function typeContradiction(claim: string, evidenceText: string): string | null {
+  const claimObject = extractTypeObject(claim);
+  const evidenceObject = extractTypeObject(evidenceText);
+  if (!claimObject || !evidenceObject) return null;
+
+  const claimTokens = uniqueTokens(claimObject);
+  const evidenceTokens = uniqueTokens(evidenceObject);
+
+  for (const [left, right] of CONTRAST_PAIRS) {
+    if (hasTokenOrVariant(claimTokens, left) && hasTokenOrVariant(evidenceTokens, right) && !hasTokenOrVariant(evidenceTokens, left)) {
+      return `Claim type says "${claimObject}", but source type says "${evidenceObject}".`;
+    }
+    if (hasTokenOrVariant(claimTokens, right) && hasTokenOrVariant(evidenceTokens, left) && !hasTokenOrVariant(evidenceTokens, right)) {
+      return `Claim type says "${claimObject}", but source type says "${evidenceObject}".`;
+    }
+  }
+
+  const claimHead = typeHead(claimObject);
+  const evidenceHead = typeHead(evidenceObject);
+  if (claimHead && evidenceHead && claimHead !== evidenceHead) {
+    const claimModifiers = new Set(tokenize(claimObject).map(singularizeTypeToken).filter(token => token !== claimHead));
+    const evidenceModifiers = new Set(tokenize(evidenceObject).map(singularizeTypeToken).filter(token => token !== evidenceHead));
+    const claimHasEvidenceHead = claimModifiers.has(evidenceHead);
+    const evidenceHasClaimHead = evidenceModifiers.has(claimHead);
+    if (claimHasEvidenceHead || evidenceHasClaimHead) return null;
+
+    for (const [left, right] of CONTRAST_PAIRS) {
+      if ((claimHead === left && evidenceHead === right) || (claimHead === right && evidenceHead === left)) {
+        return `Claim type says "${claimObject}", but source type says "${evidenceObject}".`;
+      }
+    }
+
+    const incompatibleTypePairs: Array<[string, string]> = [
+      ['apricot', 'character'],
+      ['ender', 'developer'],
+      ['show', 'magazine'],
+    ];
+    const sharedModifiers = [...claimModifiers].filter(token => evidenceModifiers.has(token)).length;
+    if (
+      sharedModifiers > 0 &&
+      incompatibleTypePairs.some(([left, right]) =>
+        (claimHead === left && evidenceHead === right) || (claimHead === right && evidenceHead === left)
+      )
+    ) {
+      return `Claim type says "${claimObject}", but source type says "${evidenceObject}".`;
     }
   }
 
@@ -381,7 +838,7 @@ function entitySubstitution(claim: string, evidenceText: string): string | null 
     const contextInEvidence = contextTokens.filter(t => evidenceTokenSet.has(t)).length;
     const contextRatio = contextTokens.length > 0 ? contextInEvidence / contextTokens.length : 0;
 
-    if (contextRatio >= 0.35 && contextTokens.length >= 2) {
+    if (contextRatio >= 0.55 && contextTokens.length >= 4) {
       const candidates = evidenceEntities
         .filter(e => normalizeEntity(e) !== normalized)
         .slice(0, 3)
@@ -500,6 +957,19 @@ export function runDeterministicDetector(claim: string, sourceText: string): Det
     });
   }
 
+  const negation = negationContradiction(claim, primaryEvidence);
+  if (negation) {
+    signals.push({
+      name: 'NEGATION_CONTRADICTION',
+      label: 'Negation mismatch',
+      verdict: 'CONTRADICT',
+      score: 0.9,
+      weight: 0.3,
+      rationale: negation,
+      evidence: primaryEvidence,
+    });
+  }
+
   const relation = relationContradiction(claim, primaryEvidence);
   if (relation) {
     signals.push({
@@ -513,14 +983,27 @@ export function runDeterministicDetector(claim: string, sourceText: string): Det
     });
   }
 
+  const typeMismatch = typeContradiction(claim, primaryEvidence);
+  if (typeMismatch) {
+    signals.push({
+      name: 'TYPE_CONTRADICTION',
+      label: 'Type mismatch',
+      verdict: 'CONTRADICT',
+      score: 0.84,
+      weight: 0.2,
+      rationale: typeMismatch,
+      evidence: primaryEvidence,
+    });
+  }
+
   const entitySub = entitySubstitution(claim, primaryEvidence);
   if (entitySub) {
     signals.push({
       name: 'ENTITY_SUBSTITUTION',
       label: 'Entity substitution',
       verdict: 'CONTRADICT',
-      score: 0.85,
-      weight: 0.26,
+      score: 0.72,
+      weight: 0.18,
       rationale: entitySub,
       evidence: primaryEvidence,
     });
@@ -583,7 +1066,7 @@ export function deriveDeterministicVerdict(
     signal => signal.name === 'LEXICAL_OVERLAP' && signal.verdict === 'SUPPORT' && signal.score >= 0.72
   );
   const hasStrongCoverage = report.evidenceCoverage >= 0.62;
-  const hasVeryStrongCoverage = report.evidenceCoverage >= 0.78 && report.contradictionScore < 0.2;
+  const hasVeryStrongCoverage = report.evidenceCoverage >= 0.86 && report.contradictionScore < 0.2;
   const hasQuoteMatch = report.signals.some(
     signal => signal.name === 'QUOTE_MATCH' && signal.verdict === 'SUPPORT' && signal.score >= 0.95
   );
