@@ -117,7 +117,7 @@ export default function Home() {
                 Truth<span className="text-[#6366f1]">Layer</span>
               </h1>
               <p className="text-[#8b8fa8] text-base max-w-sm">
-                Ask anything. Every citation verified against its source before it reaches you.
+                Verification-augmented generation. Every citation verified against its source before it reaches you.
               </p>
             </div>
 

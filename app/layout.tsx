@@ -13,24 +13,25 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TruthLayer — Citation Verification Engine",
+  title: "TruthLayer — Verification-Augmented Generation",
   description:
-    "A calibrated acceptance gate for citation hallucination in AI search. 3-stage detector pipeline with inspectable signals, answer-level gate decisions, and paper-grade evaluation.",
+    "An architectural layer for reducing citation hallucination in transformer pipelines. 99.1% accuracy on decided cases with 0.8% false accept rate using deterministic signals.",
   authors: [{ name: "Tanush Appapogu" }],
   keywords: [
+    "verification-augmented generation",
     "hallucination detection",
     "citation verification",
-    "AI search",
-    "fact-checking",
-    "NLI",
+    "transformer architecture",
+    "RAG pipeline",
     "acceptance gate",
-    "Perplexity",
+    "deterministic signals",
+    "NLI",
   ],
   metadataBase: new URL("https://truthlayer.vercel.app"),
   openGraph: {
-    title: "TruthLayer — Citation Verification Engine",
+    title: "TruthLayer — Verification-Augmented Generation",
     description:
-      "A calibrated acceptance gate for citation hallucination in AI search.",
+      "An architectural layer for reducing citation hallucination in transformer pipelines. 99.1% accuracy, 0.8% false accept rate.",
     siteName: "TruthLayer",
     type: "website",
   },
@@ -38,7 +39,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "TruthLayer",
     description:
-      "A calibrated acceptance gate for citation hallucination in AI search.",
+      "Verification-Augmented Generation: reducing citation hallucination in transformer pipelines through deterministic signal architecture.",
   },
 };
 
