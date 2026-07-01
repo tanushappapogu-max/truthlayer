@@ -1,0 +1,59 @@
+<svg width="1180" height="560" viewBox="0 0 1180 560" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1180" height="560" rx="24" fill="#0c0d12"/>
+  <text x="48" y="58" fill="#f8fafc" font-family="Arial, sans-serif" font-size="26" font-weight="700">Graph-Gated TruthLayer for LLaMA</text>
+  <text x="48" y="86" fill="#94a3b8" font-family="Arial, sans-serif" font-size="14">A verifier graph can run after generation or as a lightweight adapter/logits processor during decoding.</text>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <linearGradient id="panel" x1="0" x2="1">
+      <stop offset="0" stop-color="#13141c"/>
+      <stop offset="1" stop-color="#171923"/>
+    </linearGradient>
+  </defs>
+
+  <g font-family="Arial, sans-serif">
+    <rect x="48" y="140" width="172" height="118" rx="14" fill="url(#panel)" stroke="#334155"/>
+    <text x="74" y="174" fill="#e2e8f0" font-size="16" font-weight="700">Prompt + RAG</text>
+    <text x="74" y="200" fill="#94a3b8" font-size="12">Question, retrieved</text>
+    <text x="74" y="218" fill="#94a3b8" font-size="12">sources, citations</text>
+
+    <line x1="220" y1="199" x2="292" y2="199" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <rect x="292" y="122" width="190" height="154" rx="14" fill="url(#panel)" stroke="#6366f1"/>
+    <text x="322" y="158" fill="#f8fafc" font-size="16" font-weight="700">LLaMA decoder</text>
+    <text x="322" y="184" fill="#a5b4fc" font-size="12">Baseline generation</text>
+    <text x="322" y="204" fill="#94a3b8" font-size="12">Autoregressive draft</text>
+    <text x="322" y="224" fill="#94a3b8" font-size="12">with cited claims</text>
+
+    <line x1="482" y1="199" x2="554" y2="199" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <rect x="554" y="92" width="228" height="214" rx="14" fill="#101820" stroke="#14b8a6"/>
+    <text x="584" y="128" fill="#f8fafc" font-size="16" font-weight="700">Claim-evidence graph</text>
+    <circle cx="611" cy="176" r="20" fill="#6366f1"/>
+    <circle cx="708" cy="155" r="18" fill="#0ea5e9"/>
+    <circle cx="704" cy="225" r="18" fill="#f59e0b"/>
+    <circle cx="626" cy="252" r="18" fill="#22c55e"/>
+    <line x1="631" y1="172" x2="690" y2="158" stroke="#475569" stroke-width="2"/>
+    <line x1="628" y1="190" x2="688" y2="216" stroke="#475569" stroke-width="2"/>
+    <line x1="616" y1="196" x2="623" y2="235" stroke="#475569" stroke-width="2"/>
+    <text x="584" y="286" fill="#94a3b8" font-size="12">Nodes: claims, evidence, entities,</text>
+    <text x="584" y="302" fill="#94a3b8" font-size="12">numbers, relations, signals, gate</text>
+
+    <line x1="782" y1="199" x2="854" y2="199" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <rect x="854" y="122" width="224" height="154" rx="14" fill="url(#panel)" stroke="#f59e0b"/>
+    <text x="884" y="158" fill="#f8fafc" font-size="16" font-weight="700">Graph gate</text>
+    <text x="884" y="184" fill="#fbbf24" font-size="12">ACCEPT / REVISE</text>
+    <text x="884" y="204" fill="#fbbf24" font-size="12">REJECT / ABSTAIN</text>
+    <text x="884" y="232" fill="#94a3b8" font-size="12">Risk-conditioned release</text>
+
+    <path d="M 934 276 C 934 354 408 354 408 276" stroke="#475569" stroke-width="2" stroke-dasharray="8 8" marker-end="url(#arrow)"/>
+    <text x="496" y="386" fill="#94a3b8" font-size="13">Optional adapter path: graph context biases hidden states or logits before final decoding.</text>
+
+    <rect x="156" y="438" width="868" height="64" rx="14" fill="#111827" stroke="#1f2937"/>
+    <text x="184" y="465" fill="#e2e8f0" font-size="14" font-weight="700">Core idea</text>
+    <text x="184" y="486" fill="#94a3b8" font-size="13">The model can still generate creatively, but cited claims must pass an evidence graph before the answer is released.</text>
+  </g>
+</svg>

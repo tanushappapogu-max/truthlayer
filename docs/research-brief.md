@@ -1,8 +1,8 @@
-# Verification-Augmented Generation: Reducing Citation Hallucination in Transformer Pipelines Through Deterministic Signal Architecture
+# TruthLayer: Graph-Gated Verification-Augmented Generation for Reducing Citation Hallucination in Transformer Pipelines
 
 ## Abstract
 
-Citation hallucination — where a transformer-based system attaches a real source to a claim that source does not support — is an attribution failure, not a knowledge failure. Current approaches treat this as a post-hoc evaluation problem. We propose **Verification-Augmented Generation (VAG)**, an inference-time architectural layer that integrates directly into transformer-based retrieval-augmented generation pipelines. VAG interposes a multi-signal verification module between the generation and output stages, using deterministic signals as the primary detection mechanism with learned models as fallback. On a 1,036-case benchmark (FEVER-derived), the deterministic layer achieves **99.1% accuracy** on decided cases with a **0.8% false accept rate** and **99.2% precision** — using zero model calls. Four of eight deterministic signals achieve 100% precision. The architecture requires no fine-tuning, no weight modification, and adds sub-100ms latency for deterministic checks, making it deployable in any transformer pipeline that produces cited outputs.
+Citation hallucination — where a transformer-based system attaches a real source to a claim that source does not support — is an attribution failure, not a knowledge failure. Current approaches often treat this as post-hoc evaluation. We propose **TruthLayer**, a graph-gated Verification-Augmented Generation (VAG) layer that can be inserted into transformer-based RAG pipelines and LLaMA-style generation wrappers. TruthLayer interposes a typed claim-evidence graph, deterministic contradiction signals, and an acceptance gate between generation and release. On a 1,036-case benchmark (FEVER-derived), the deterministic layer achieves **99.1% accuracy** on decided cases with a **0.8% false accept rate** and **99.2% precision** — using zero model calls. The Python graph gate reduces accepted unsupported claims from **529/529** for a vanilla pass-through baseline to **19/529**, a **96.4% reduction** before NLI or LLM fallback.
 
 ## 1. Problem Statement
 
@@ -16,11 +16,11 @@ The failure is structural. Current transformers generate text autoregressively, 
 
 We define **citation hallucination** as: a cited claim where the referenced source does not entail the local sentence attached to the citation marker.
 
-## 2. Verification-Augmented Generation Architecture
+## 2. Graph-Gated Verification-Augmented Generation Architecture
 
 ### 2.1 Design Principle
 
-VAG is a model-agnostic architectural layer that can be inserted into any transformer-based RAG pipeline between generation and output. It operates at inference time, requires no model fine-tuning or weight modification, and is compatible with any base model that produces cited outputs.
+TruthLayer is a model-agnostic architectural layer that can be inserted into any transformer-based RAG pipeline between generation and output. It operates at inference time, requires no base-model fine-tuning or weight modification, and is compatible with any base model that produces cited outputs. For LLaMA-style models, it can also run as a wrapper with a graph adapter and risk-aware logits processor.
 
 The core design principle: **deterministic signals first, learned models second.** This yields three properties that model-only approaches lack:
 
@@ -42,6 +42,9 @@ Transformer Output (answer + citation URLs)
      ├── Evidence selection
      │     Token overlap + density ranking → top-k passages
      │
+     ├── Graph construction
+     │     Claim, source, evidence, entity, quantity, relation, signal, gate nodes
+     │
      ├── Stage 1: Deterministic Verification Module
      │     8 rule-based signals (see §3)
      │     → If high-confidence verdict: emit decision (skip Stage 2-3)
@@ -54,7 +57,7 @@ Transformer Output (answer + citation URLs)
      │     Constrained prompt over retrieved evidence only
      │     → Emit decision
      │
-     └── Acceptance Gate
+     └── Graph Acceptance Gate
            Aggregates claim-level verdicts → answer-level decision
            ACCEPT | REVISE | REJECT | ABSTAIN
 ```
@@ -67,6 +70,40 @@ The VAG layer is designed as a drop-in module for existing transformer pipelines
 - **Streaming compatibility**: can run in parallel with token streaming, flagging citations as they appear
 - **Configurable strictness**: thresholds are exposed parameters, allowing pipeline operators to tune the false-accept/false-reject tradeoff
 - **Graceful degradation**: if source retrieval fails, the gate abstains rather than blocking — the layer never makes the output worse
+
+### 2.4 Claim-Evidence Graph
+
+TruthLayer models each cited claim as a typed graph:
+
+| Node Type | Meaning |
+|---|---|
+| `claim` | Atomic cited fact emitted by the model |
+| `source` | Retrieved URL or evidence document |
+| `evidence` | Best matching evidence window |
+| `entity` | Person, organization, place, or named object |
+| `quantity` | Number, date, count, percentage, or measurement |
+| `relation` | Extracted predicate such as "founded by" or "directed by" |
+| `signal` | Detector output such as numeric contradiction |
+| `gate` | Final release-control node |
+
+Edges encode the verification trace: `supports`, `contradicts`, `grounds`, `attenuates`, and `routes`. This turns a citation verdict into a structured object that a LLaMA wrapper can inspect, log, and use for regeneration.
+
+### 2.5 LLaMA Wrapper and Adapter
+
+The optional Python implementation in `truthlayer_llama/` provides:
+
+- `EvidenceGraphBuilder` — builds the claim-evidence graph from a draft answer and retrieved source text
+- `GraphVerificationAdapter` — projects graph node features into the model hidden size and produces graph-conditioned hidden states
+- `TruthLayerRiskLogitsProcessor` — biases generation toward revision/abstention when graph risk is high
+- `TruthLayerLlama` — runs baseline generation, verifies the draft, and regenerates from evidence-only instructions if the graph gate fails
+
+The adapter update is:
+
+```
+H' = H + sigmoid(W_g z_G) * z_G
+```
+
+where `H` is the decoder hidden state and `z_G` is the pooled message-passed graph context.
 
 ## 3. Deterministic Verification Signals
 
@@ -140,7 +177,26 @@ This is by design. The deterministic module handles the cases where structured s
 
 **Four signals achieve 100% precision**: numeric contradiction (44 fires), negation contradiction (36), relation mismatch (21), and type contradiction (13). These signals never produce false positives on the benchmark, making them reliable for high-confidence REJECT decisions.
 
-### 5.4 Hallucination Reduction
+### 5.4 LLaMA Wrapper Before/After — Offline Graph Gate
+
+The graph-gated LLaMA wrapper was evaluated as a release-control layer on the same 1,036 claim/evidence pairs. The baseline represents a vanilla LLaMA/RAG pass-through system: if the model emits a cited claim, the system releases it.
+
+| System | Accepted Unsupported Claims | False Accept Rate |
+|---|---:|---:|
+| Vanilla LLaMA / RAG pass-through | 529 / 529 | 100.0% |
+| TruthLayer Python graph gate | **19 / 529** | **3.6%** |
+
+Additional graph-gate counts:
+
+- Rejected unsupported claims: 103
+- Routed unsupported claims to revise/abstain: 407
+- Accepted supported claims: 86
+- Routed supported claims to revise/abstain: 401
+- False rejected supported claims: 20
+
+This graph gate is intentionally conservative. It is designed to reduce unsupported release before NLI or LLM fallback, not to be the final semantic verifier.
+
+### 5.5 Hallucination Reduction
 
 On the 529 UNSUPPORTED cases in the benchmark:
 - Stage 1 deterministic catches **126 (23.8%)** with only 1 false positive
@@ -159,6 +215,8 @@ When deployed as a pipeline component:
 | **FActScore** (Min et al., 2023) | Atomic fact decomposition scored against general knowledge | Scores factuality, not attribution — VAG checks whether the *specific cited source* supports the claim |
 | **SAFE** (Wei et al., 2024) | LLM-as-judge for factuality | Black-box verdict, no signal decomposition — VAG provides inspectable, auditable signals |
 | **Minicheck** (Tang et al., 2024) | Compact NLI model for grounded fact-checking | Single-model, single-call — VAG stages deterministic signals before any model call |
+| **GraphRAG** (Edge et al., 2024) | Graph index for corpus-level RAG | Optimizes retrieval/summarization — TruthLayer graphs the generated claim and citation support |
+| **GraphFormers** (Yang et al., 2021) | GNN components nested with transformer layers | Inspires graph/transformer fusion — TruthLayer keeps the adapter lightweight and inference-time |
 
 ### 6.1 Novel Contributions
 

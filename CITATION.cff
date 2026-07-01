@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use TruthLayer, please cite this repository."
+title: "TruthLayer: Graph-Gated Verification-Augmented Generation"
+authors:
+  - family-names: "Appapogu"
+    given-names: "Tanush"
+repository-code: "https://github.com/tanushappapogu-max/truthlayer"
+date-released: "2026-07-01"
+license: "MIT"

@@ -2,6 +2,12 @@
   "name": "truthlayer-build",
   "version": "0.1.0",
   "private": true,
+  "author": "Tanush Appapogu <tanush.appapogu@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tanushappapogu-max/truthlayer.git"
+  },
+  "license": "MIT",
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",

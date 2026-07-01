@@ -1,0 +1,25 @@
+[project]
+name = "truthlayer"
+version = "0.1.0"
+description = "Python-first graph-gated verification engine for LLaMA-style transformer pipelines."
+authors = [{ name = "Tanush Appapogu", email = "tanush.appapogu@gmail.com" }]
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []
+
+[project.optional-dependencies]
+llama = [
+  "torch",
+  "transformers",
+]
+
+[project.scripts]
+truthlayer = "truthlayer.cli:main"
+
+[tool.setuptools]
+packages = ["truthlayer", "truthlayer_llama"]
+
+[tool.setuptools.package-data]
+truthlayer = ["py.typed"]
+truthlayer_llama = ["py.typed"]

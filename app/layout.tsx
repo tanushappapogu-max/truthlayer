@@ -13,15 +13,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TruthLayer — Verification-Augmented Generation",
+  title: "TruthLayer — Graph-Gated Verification-Augmented Generation",
   description:
-    "An architectural layer for reducing citation hallucination in transformer pipelines. 99.1% accuracy on decided cases with 0.8% false accept rate using deterministic signals.",
+    "A graph-gated architectural layer for reducing citation hallucination in LLaMA-style transformer pipelines. 99.1% accuracy on decided cases with 0.8% false accept rate using deterministic signals.",
   authors: [{ name: "Tanush Appapogu" }],
   keywords: [
     "verification-augmented generation",
     "hallucination detection",
     "citation verification",
     "transformer architecture",
+    "LLaMA",
+    "graph verification",
     "RAG pipeline",
     "acceptance gate",
     "deterministic signals",
@@ -29,9 +31,9 @@ export const metadata: Metadata = {
   ],
   metadataBase: new URL("https://truthlayer.vercel.app"),
   openGraph: {
-    title: "TruthLayer — Verification-Augmented Generation",
+    title: "TruthLayer — Graph-Gated Verification-Augmented Generation",
     description:
-      "An architectural layer for reducing citation hallucination in transformer pipelines. 99.1% accuracy, 0.8% false accept rate.",
+      "A graph-gated architectural layer for reducing citation hallucination in transformer pipelines. 99.1% accuracy, 0.8% false accept rate.",
     siteName: "TruthLayer",
     type: "website",
   },
@@ -39,7 +41,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "TruthLayer",
     description:
-      "Verification-Augmented Generation: reducing citation hallucination in transformer pipelines through deterministic signal architecture.",
+      "Graph-Gated Verification-Augmented Generation: reducing citation hallucination in transformer pipelines through claim-evidence graphs.",
   },
 };
 

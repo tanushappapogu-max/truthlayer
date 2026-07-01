@@ -1,8 +1,10 @@
 import Link from 'next/link';
+import Image from 'next/image';
+import { GRAPH_ARCHITECTURE_STAGES, graphGateLlamaComparison } from '@/lib/truthlayer-graph';
 
 export const metadata = {
-  title: 'Research — TruthLayer',
-  description: 'Verification-Augmented Generation: an architectural layer for reducing citation hallucination in transformer pipelines.',
+  title: 'Research — TruthLayer Graph-Gated VAG',
+  description: 'Graph-gated Verification-Augmented Generation: an architectural layer for reducing citation hallucination in LLaMA-style transformer pipelines.',
 };
 
 function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
@@ -41,6 +43,31 @@ function SignalRow({ name, weight, precision, fires, detects }: { name: string; 
   );
 }
 
+function PaperFigure({ src, alt, caption, width, height }: { src: string; alt: string; caption: string; width: number; height: number }) {
+  return (
+    <figure className="rounded-xl border border-[#1e2030] bg-[#13141c] overflow-hidden">
+      <Image src={src} alt={alt} width={width} height={height} className="w-full h-auto block" />
+      <figcaption className="border-t border-[#1e2030] px-4 py-3 text-[11px] text-[#8b8fa8] leading-relaxed">
+        {caption}
+      </figcaption>
+    </figure>
+  );
+}
+
+function StagePill({ stage, name, description }: { stage: string; name: string; description: string }) {
+  return (
+    <div className="rounded-lg border border-[#1e2030] bg-[#0c0d12] p-3">
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="w-5 h-5 rounded-md bg-[#6366f1]/15 text-[#a5b4fc] flex items-center justify-center text-[10px] font-bold">
+          {stage}
+        </span>
+        <h3 className="text-xs font-semibold text-white">{name}</h3>
+      </div>
+      <p className="text-[11px] text-[#8b8fa8] leading-relaxed">{description}</p>
+    </div>
+  );
+}
+
 function TaxonomyCard({ icon, title, example, signal, severity }: { icon: string; title: string; example: string; signal: string; severity: 'high' | 'medium' | 'low' }) {
   const sevColor = severity === 'high' ? 'border-red-500/25 bg-red-500/5' : severity === 'medium' ? 'border-amber-500/25 bg-amber-500/5' : 'border-[#2e3050] bg-[#13141c]';
   const sevText = severity === 'high' ? 'text-red-400' : severity === 'medium' ? 'text-amber-400' : 'text-[#8b8fa8]';
@@ -60,6 +87,8 @@ function TaxonomyCard({ icon, title, example, signal, severity }: { icon: string
 }
 
 export default function ResearchPage() {
+  const graphComparison = graphGateLlamaComparison();
+
   return (
     <div className="min-h-screen bg-[#0c0d12] text-[#e2e4f0] flex flex-col">
       {/* Header */}
@@ -92,16 +121,16 @@ export default function ResearchPage() {
             Research
           </div>
           <h1 className="text-3xl font-bold text-white tracking-tight leading-tight">
-            Verification-Augmented Generation
+            Graph-Gated Verification-Augmented Generation
           </h1>
           <p className="text-lg text-[#8b8fa8] leading-relaxed max-w-2xl">
-            An architectural layer for reducing citation hallucination in transformer pipelines
-            through deterministic signal architecture.
+            A claim-evidence graph and LLaMA-compatible verification layer for reducing
+            citation hallucination in transformer pipelines.
           </p>
           <div className="flex items-center gap-3 text-[11px] text-[#4a4e6a]">
             <span>Tanush Appapogu</span>
             <span>·</span>
-            <span>2025</span>
+            <span>2026</span>
             <span>·</span>
             <a href="https://github.com/tanushappapogu-max/truthlayer" target="_blank" rel="noopener noreferrer" className="text-[#6366f1] hover:underline">github.com/tanushappapogu-max/truthlayer</a>
           </div>
@@ -231,6 +260,28 @@ export default function ResearchPage() {
             citation is flagged, the reason is a verifiable fact about the text — &quot;claim says 6,848m, source says
             8,849m&quot; — not a model opinion. This makes the system inspectable, auditable, and cheap.
           </p>
+
+          <PaperFigure
+            src="/figures/truthlayer-architecture.svg"
+            alt="Graph-gated TruthLayer architecture for LLaMA"
+            width={1180}
+            height={560}
+            caption="TruthLayer can run after generation as a release gate or inside a LLaMA-style pipeline as a graph-conditioned adapter and logits processor."
+          />
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {GRAPH_ARCHITECTURE_STAGES.map(stage => (
+              <StagePill key={stage.stage} {...stage} />
+            ))}
+          </div>
+
+          <PaperFigure
+            src="/figures/claim-evidence-graph.svg"
+            alt="Claim evidence graph with claim, source, evidence, entity, quantity, signal, and gate nodes"
+            width={980}
+            height={620}
+            caption="The graph representation turns each citation check into typed nodes and weighted edges, making the failure trace auditable."
+          />
 
           <div className="rounded-xl border border-[#6366f1]/20 bg-[#6366f1]/5 p-4">
             <p className="text-xs text-[#c8cad8] leading-relaxed">
@@ -445,6 +496,29 @@ export default function ResearchPage() {
               This is by design — the module handles cases where structured signals provide confident verdicts, and
               abstains on ambiguous cases that require semantic reasoning.
             </p>
+          </div>
+
+          <div className="rounded-xl border border-[#1e2030] bg-[#13141c] p-6 space-y-5">
+            <div>
+              <h3 className="text-sm font-semibold text-white">LLaMA wrapper before/after</h3>
+              <p className="text-xs text-[#8b8fa8] mt-1">
+                Offline graph-gate run on the same 1,036 claim/evidence pairs. The vanilla baseline accepts every generated
+                cited claim; the TruthLayer wrapper rejects clear contradictions and routes uncertain cases to revise or abstain.
+              </p>
+            </div>
+            <PaperFigure
+              src="/figures/before-after.svg"
+              alt="Before after chart showing unsupported accepted claims dropping from 529 to 19"
+              width={980}
+              height={520}
+              caption="The Python graph gate reduces accepted unsupported claims by 96.4% before NLI or LLM fallback."
+            />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <StatCard value={graphComparison.baseline.acceptedUnsupported.toString()} label="Baseline false accepts" />
+              <StatCard value={graphComparison.truthlayer.acceptedUnsupported.toString()} label="Graph-gate false accepts" highlight />
+              <StatCard value={`${(graphComparison.delta.falseAcceptReduction * 100).toFixed(1)}%`} label="Reduction" highlight />
+              <StatCard value={graphComparison.truthlayer.abstainedUnsupported.toString()} label="Routed to revise/abstain" />
+            </div>
           </div>
         </Section>
 

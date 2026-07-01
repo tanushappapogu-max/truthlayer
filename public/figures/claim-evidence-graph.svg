@@ -1,0 +1,63 @@
+<svg width="980" height="620" viewBox="0 0 980 620" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="980" height="620" rx="24" fill="#0c0d12"/>
+  <text x="44" y="58" fill="#f8fafc" font-family="Arial, sans-serif" font-size="25" font-weight="700">Claim-Evidence Verification Graph</text>
+  <text x="44" y="86" fill="#94a3b8" font-family="Arial, sans-serif" font-size="14">Typed nodes make each verification failure inspectable instead of a black-box judge score.</text>
+
+  <defs>
+    <marker id="arrow-graph" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <g font-family="Arial, sans-serif">
+    <circle cx="470" cy="304" r="62" fill="#312e81" stroke="#818cf8" stroke-width="2"/>
+    <text x="470" y="298" fill="#fff" font-size="17" font-weight="700" text-anchor="middle">Claim</text>
+    <text x="470" y="320" fill="#c7d2fe" font-size="12" text-anchor="middle">atomic cited fact</text>
+
+    <circle cx="188" cy="176" r="48" fill="#082f49" stroke="#38bdf8" stroke-width="2"/>
+    <text x="188" y="172" fill="#e0f2fe" font-size="14" font-weight="700" text-anchor="middle">Source</text>
+    <text x="188" y="192" fill="#bae6fd" font-size="11" text-anchor="middle">URL text</text>
+
+    <circle cx="236" cy="440" r="54" fill="#064e3b" stroke="#34d399" stroke-width="2"/>
+    <text x="236" y="436" fill="#ecfdf5" font-size="14" font-weight="700" text-anchor="middle">Evidence</text>
+    <text x="236" y="456" fill="#bbf7d0" font-size="11" text-anchor="middle">best window</text>
+
+    <circle cx="730" cy="150" r="44" fill="#431407" stroke="#fb923c" stroke-width="2"/>
+    <text x="730" y="146" fill="#fff7ed" font-size="14" font-weight="700" text-anchor="middle">Entity</text>
+    <text x="730" y="165" fill="#fed7aa" font-size="11" text-anchor="middle">person/org</text>
+
+    <circle cx="786" cy="314" r="48" fill="#422006" stroke="#fbbf24" stroke-width="2"/>
+    <text x="786" y="310" fill="#fffbeb" font-size="14" font-weight="700" text-anchor="middle">Quantity</text>
+    <text x="786" y="330" fill="#fde68a" font-size="11" text-anchor="middle">number/date</text>
+
+    <circle cx="708" cy="470" r="48" fill="#4c0519" stroke="#fb7185" stroke-width="2"/>
+    <text x="708" y="466" fill="#fff1f2" font-size="14" font-weight="700" text-anchor="middle">Signal</text>
+    <text x="708" y="486" fill="#fecdd3" font-size="11" text-anchor="middle">mismatch</text>
+
+    <rect x="394" y="508" width="152" height="62" rx="16" fill="#111827" stroke="#94a3b8"/>
+    <text x="470" y="534" fill="#f8fafc" font-size="15" font-weight="700" text-anchor="middle">Gate</text>
+    <text x="470" y="554" fill="#cbd5e1" font-size="11" text-anchor="middle">release decision</text>
+
+    <line x1="232" y1="196" x2="414" y2="276" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-graph)"/>
+    <text x="303" y="218" fill="#94a3b8" font-size="12">cites</text>
+
+    <line x1="245" y1="394" x2="420" y2="340" stroke="#22c55e" stroke-width="3" marker-end="url(#arrow-graph)"/>
+    <text x="286" y="392" fill="#86efac" font-size="12">supports</text>
+
+    <line x1="690" y1="170" x2="520" y2="268" stroke="#f97316" stroke-width="2" marker-end="url(#arrow-graph)"/>
+    <text x="612" y="198" fill="#fdba74" font-size="12">mentions</text>
+
+    <line x1="738" y1="315" x2="532" y2="309" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-graph)"/>
+    <text x="618" y="300" fill="#fde68a" font-size="12">checks</text>
+
+    <line x1="672" y1="438" x2="520" y2="344" stroke="#fb7185" stroke-width="3" marker-end="url(#arrow-graph)"/>
+    <text x="602" y="424" fill="#fda4af" font-size="12">contradicts</text>
+
+    <line x1="470" y1="366" x2="470" y2="508" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow-graph)"/>
+    <text x="486" y="444" fill="#cbd5e1" font-size="12">risk/support</text>
+
+    <rect x="44" y="518" width="278" height="58" rx="12" fill="#101820" stroke="#1e293b"/>
+    <text x="62" y="542" fill="#e2e8f0" font-size="13" font-weight="700">Why this matters</text>
+    <text x="62" y="562" fill="#94a3b8" font-size="12">Every edge is a reason the model can inspect.</text>
+  </g>
+</svg>
