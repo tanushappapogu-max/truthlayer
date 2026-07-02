@@ -1,175 +1,76 @@
 # TruthLayer
 
-**Graph-Gated Verification-Augmented Generation: an architectural layer for reducing citation hallucination in LLaMA-style transformer pipelines.**
+A verification layer that catches citation hallucinations in LLM outputs before they reach users.
 
-Citation hallucination is an attribution failure — the model retrieves a real source, the URL loads, the topic is relevant, but the specific claim attached to the citation marker is wrong. TruthLayer proposes a model-agnostic verification layer that integrates into transformer-based RAG pipelines at inference time, using deterministic signals and a claim-evidence graph as the primary detection mechanism with learned models as fallback.
+When a model like Perplexity or ChatGPT cites a source, the URL is usually real and the page is usually relevant — but the specific claim attached to the citation is often wrong. The model says 6,848m, the source says 8,849m. The model says "public university," the source says private. TruthLayer checks every cited claim against its source and blocks answers that don't hold up.
 
-On a 1,036-case benchmark, the deterministic layer achieves **99.1% accuracy** on decided cases with a **0.8% false accept rate** — using zero model calls. Four of eight signals achieve **100% precision**.
+The core idea: most citation errors are structurally detectable with deterministic checks — no model needed. Wrong numbers, swapped names, flipped polarity are pattern mismatches, not subtle semantic judgments. TruthLayer runs eight rule-based signals first and only escalates to an NLI model or LLM judge when the rules can't decide.
 
-The new Python graph-gated engine adds a before/after path: a vanilla pass-through baseline accepts **529/529 unsupported claims**, while the TruthLayer graph gate accepts **19/529**, a **96.4% reduction** before NLI or LLM fallback.
+## Results
 
----
+On a 1,036-case benchmark (FEVER-derived claim/source pairs):
 
-## Benchmark Results
-
-### Stage 1 — Deterministic Only
 | Metric | Value |
 |---|---|
-| Accuracy | **99.1%** |
-| Precision | **99.2%** |
-| Recall | 99.2% |
-| F1 | 99.2% |
-| False Accept Rate | **0.8%** |
-| Coverage | 20.8% (215/1036 decided) |
-| False Positives | 1 |
+| Accuracy (decided cases) | 99.1% |
+| Precision | 99.2% |
+| False accept rate | 0.8% |
+| Coverage | 20.8% (rest escalates to later stages) |
 
-### LLaMA Wrapper — Offline Graph Gate
-| System | Accepted unsupported claims | False accept rate |
-|---|---:|---:|
-| Vanilla LLaMA / RAG pass-through | 529 / 529 | 100.0% |
-| TruthLayer Python graph gate | **19 / 529** | **3.6%** |
+Four of the eight signals — numeric, negation, relation, and type contradiction — had zero false positives across the benchmark.
 
----
+Against a pass-through baseline that accepts everything, the gate cuts accepted unsupported claims from 529/529 to 19/529.
 
-## Architecture
-
-![TruthLayer graph-gated architecture](public/figures/truthlayer-architecture.svg)
+## How it works
 
 ```
-LLaMA / Transformer Output (answer + citation URLs)
+LLM output (answer + citation URLs)
     │
-    ├── Claim decomposition → atomic claims
+    ├── Split answer into atomic claims
+    ├── Fetch sources (Wikipedia API → Jina Reader → Serper)
     │
-    ├── Source retrieval
-    │       Wikipedia REST API → Jina Reader → Serper
+    ├── Stage 1: deterministic signals          free, <1ms
+    │     numeric / negation / relation / type contradiction,
+    │     contrast pairs, hedging, evidence coverage, entity substitution
     │
-    ├── Stage 1: Deterministic Verification Module
-    │       ├── numeric contradiction (100% precision)
-    │       ├── negation contradiction (100% precision)
-    │       ├── relation mismatch (100% precision)
-    │       ├── type contradiction (100% precision)
-    │       ├── contrast contradiction (96% precision)
-    │       ├── hedging mismatch (83% precision)
-    │       ├── evidence coverage
-    │       └── entity substitution
-    │       → High-confidence verdict? Return. Otherwise escalate.
+    ├── Stage 2: NLI cross-encoder              nli-deberta-v3-base
+    ├── Stage 3: LLM judge                      Llama 3.1 8B (fallback only)
     │
-    ├── Stage 2: NLI Cross-Encoder (184M params)
-    │       └── cross-encoder/nli-deberta-v3-base
-    │
-    ├── Stage 3: LLM Judge (fallback)
-    │       └── Llama 3.1 8B via OpenRouter / Perplexity Sonar
-    │
-    └── Acceptance Gate
-            ├── ACCEPT  — all claims supported, score ≥ 0.82
-            ├── REVISE  — mismatch found, below reject threshold
-            ├── REJECT  — high-confidence contradiction (≥ 0.78)
-            └── ABSTAIN — insufficient evidence (>25% unresolved)
+    └── Acceptance gate
+          ACCEPT / REVISE / REJECT / ABSTAIN
 ```
 
-Deterministic signals first, graph release control second, learned models third. When a citation is flagged, the reason is a verifiable fact about the text — not a model opinion.
+Each cited claim gets a full trace: which signals fired, what evidence they matched, and why. When a claim is rejected, the reason is a verifiable fact about the text ("claim says 6,848, source says 8,849"), not a model opinion.
 
-### Claim-Evidence Graph
+The gate aggregates claim-level verdicts into one answer-level decision. One high-confidence contradiction blocks the whole answer — if one of five citations is provably wrong, the answer isn't trustworthy.
 
-![Claim evidence graph](public/figures/claim-evidence-graph.svg)
+## Signal precision
 
-TruthLayer models each cited claim as a typed graph:
+| Signal | Catches | Precision |
+|---|---|---|
+| Numeric contradiction | wrong dates/counts/measurements | 100% (44/44) |
+| Negation contradiction | claim negates what the source says | 100% (36/36) |
+| Relation mismatch | "directed by X" vs "directed by Y" | 100% (21/21) |
+| Type contradiction | wrong category ("is a film" vs "is a series") | 100% (13/13) |
+| Contrast contradiction | polarity flips (public/private) | 96% (27/28) |
+| Hedging mismatch | "always" vs "sometimes" | 83% (20/24) |
+| Evidence coverage | irrelevant/off-topic source | 62% |
+| Entity substitution | wrong person/org | 54% |
 
-- **Nodes:** claim, source, evidence window, entity, quantity, relation, signal, gate
-- **Edges:** cites, contains, mentions, grounds, supports, contradicts, routes, attenuates
-- **Gate:** `ACCEPT | REVISE | REJECT | ABSTAIN`
+## Repo layout
 
-The graph can run as:
-
-- a **post-generation release gate** around any RAG model
-- a **LLaMA wrapper** that regenerates unsafe drafts from evidence-only prompts
-- a **graph adapter / logits processor** for Hugging Face generation
-
----
-
-## Citation Hallucination Taxonomy
-
-| Failure Mode | Mechanism | Signal | Benchmark Precision |
-|---|---|---|---|
-| Numeric drift | Model picks number from right paragraph, wrong row | `NUMERIC_CONTRADICTION` | **100%** |
-| Negation flip | Claim negates what evidence states | `NEGATION_CONTRADICTION` | **100%** |
-| Relation swap | "directed by X" → source says "directed by Y" | `RELATION_CONTRADICTION` | **100%** |
-| Type error | "is a [type A]" → source says "is a [type B]" | `TYPE_CONTRADICTION` | **100%** |
-| Polarity inversion | "public" → source says "private" | `CONTRAST_CONTRADICTION` | 96% |
-| Hedging escalation | "always" → source says "sometimes" | `HEDGING_MISMATCH` | 83% |
-| Entity substitution | Wrong person/org in same context | `ENTITY_SUBSTITUTION` | 54% |
-| Irrelevant citation | Topic mismatch (homonym/disambiguation) | `EVIDENCE_COVERAGE` | 62% |
-
----
-
-## Evaluation Suite
-
-The `/benchmark` page runs **1,036 labeled claim/source pairs** and provides:
-
-- **Confusion matrix** — TP/FP/FN/TN visualization
-- **Threshold sweep** — precision/recall/F1 curves across confidence thresholds
-- **Per-signal ablation** — disable any signal to measure its contribution
-- **Gold trace** — inspect the full pipeline for any individual case
-- **JSONL export** — reproducible results with per-case signals
-
-The Python engine can be run directly:
-
-```bash
-python3 -m truthlayer verify \
-  --claim "Mount Everest is 6848 meters tall." \
-  --evidence "Mount Everest is Earths highest mountain above sea level, with an elevation of 8,849 meters."
+```
+app/               Next.js demo — search UI, /benchmark eval suite, /research writeup
+lib/truthlayer.ts  TypeScript detector used by the web app
+truthlayer/        Python package — signals, evidence selection, graph, gate, pipeline, CLI
+truthlayer_llama/  Hugging Face integration — wrapper, adapter, logits processor
+experiments/       eval scripts
+docs/              research brief
 ```
 
-The offline graph-gate eval can be run with:
+## Usage
 
-```bash
-python3 -m truthlayer bench
-```
-
-For a real model before/after run:
-
-```bash
-python3 experiments/run_llama_before_after.py \
-  --model meta-llama/Llama-3.2-1B-Instruct \
-  --prompt "Answer the question with citations..." \
-  --evidence-file evidence.txt
-```
-
----
-
-## Stack
-
-- **Next.js 16** (App Router)
-- **Tailwind CSS**
-- **TruthLayer graph gate** — typed claim/evidence graph + risk-conditioned release control
-- **Python core package** — `truthlayer` modules for signals, graph, gate, pipeline, benchmark, and CLI
-- **Optional LLaMA integration** — Hugging Face wrapper, graph adapter, logits processor
-- **Perplexity Sonar API** — answer generation
-- **HuggingFace Inference API** — NLI cross-encoder (Stage 2)
-- **OpenRouter** — LLM judge (Stage 3)
-- **Wikipedia REST API, Jina Reader, Serper** — source retrieval
-
-## Python Package Structure
-
-```text
-truthlayer/
-  types.py       # dataclasses and literals for verifier outputs
-  text.py        # normalization, tokenization, entity/number helpers
-  evidence.py    # evidence-window selection
-  signals.py     # deterministic signal registry
-  graph.py       # claim-evidence graph builder
-  gate.py        # ACCEPT / REVISE / REJECT / ABSTAIN policy
-  pipeline.py    # one-call verification API
-  benchmark.py   # local benchmark runner
-  cli.py         # python -m truthlayer
-
-truthlayer_llama/
-  adapter.py          # graph-conditioned hidden-state adapter
-  logits_processor.py # Hugging Face risk logits processor
-  llama_wrapper.py    # baseline vs verified LLaMA wrapper
-```
-
-Use it as a library:
+Python:
 
 ```python
 from truthlayer import TruthLayerPipeline
@@ -178,64 +79,35 @@ result = TruthLayerPipeline().verify(claim, evidence)
 print(result.decision, result.reason)
 ```
 
----
-
-## Getting Started
+CLI:
 
 ```bash
-git clone https://github.com/tanushappapogu-max/truthlayer.git
-cd truthlayer
+python3 -m truthlayer verify \
+  --claim "Mount Everest is 6848 meters tall." \
+  --evidence "Mount Everest is Earth's highest mountain, with an elevation of 8,849 meters."
+
+python3 -m truthlayer bench   # run the offline benchmark
+```
+
+Web app:
+
+```bash
 npm install
-```
-
-Create `.env.local`:
-
-```
-PERPLEXITY_API_KEY=your_key_here
-
-# Optional — enables NLI stage
-HUGGINGFACE_API_KEY=your_key_here
-
-# Optional — enables free LLM judge
-OPENROUTER_API_KEY=your_key_here
-```
-
-```bash
 npm run dev
 ```
 
-- Main interface: [http://localhost:3000](http://localhost:3000)
-- Research: [http://localhost:3000/research](http://localhost:3000/research)
-- Benchmark suite: [http://localhost:3000/benchmark](http://localhost:3000/benchmark)
+Requires `PERPLEXITY_API_KEY` in `.env.local`. Optional: `HUGGINGFACE_API_KEY` (enables the NLI stage), `OPENROUTER_API_KEY` (enables the LLM judge).
 
----
+- Search interface: http://localhost:3000
+- Benchmark suite: http://localhost:3000/benchmark — confusion matrix, threshold sweep, per-signal ablation, per-case traces, JSONL export
+- Research writeup: http://localhost:3000/research
 
-## Research
+## Notes
 
-See:
+The full writeup — failure taxonomy, signal design, gate policy, comparison to FEVER / FActScore / SAFE / MiniCheck — is in [docs/research-brief.md](docs/research-brief.md).
 
-- [paper/truthlayer_graph_gated_vag.tex](paper/truthlayer_graph_gated_vag.tex) — arXiv-style paper source
-- [paper/references.bib](paper/references.bib) — BibTeX bibliography
-- [docs/research-brief.md](docs/research-brief.md) — web-oriented research brief
-
-The paper covers:
-
-- Verification-Augmented Generation architecture
-- Claim-evidence graph modeling
-- Python-first verification engine
-- LLaMA wrapper, graph adapter, and logits processor integration
-- Before/after graph-gate evaluation
-- Deterministic signal design with per-signal precision analysis
-- Benchmark methodology and results
-- Hallucination reduction analysis
-- Relation to FEVER, FActScore, SAFE, Minicheck
-
----
+The internal benchmark is author-constructed from FEVER; external validation against LLM-AggreFact and decode-time gating experiments are in progress under `experiments/`.
 
 ## License
 
 MIT
-
-## Author
-
-Created and maintained by **Tanush Appapogu**.

@@ -44,3 +44,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local agent config (not part of the project)
+.claude/
+CLAUDE.md
+AGENTS.md
+
+# python env
+.venv/

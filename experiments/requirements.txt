@@ -1,0 +1,11 @@
+datasets>=2.19
+transformers>=4.44
+torch>=2.3
+sentencepiece
+pandas
+numpy
+scikit-learn
+tabulate
+matplotlib
+tqdm
+pyarrow

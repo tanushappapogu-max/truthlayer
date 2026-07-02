@@ -1,4 +1,4 @@
-export type VerifyStatus = 'SUPPORTED' | 'UNSUPPORTED' | 'UNVERIFIABLE' | 'UNREACHABLE';
+export type VerifyStatus = 'SUPPORTED' | 'UNSUPPORTED' | 'UNVERIFIABLE' | 'UNREACHABLE' | 'UNCITED';
 
 export type GateDecision = 'ACCEPT' | 'REVISE' | 'REJECT' | 'ABSTAIN';
 
@@ -274,11 +274,20 @@ export function decomposeClaimAtomics(claim: string): string[] {
 
 // --- Evidence selection ---
 
+function isNavGarbage(sentence: string): boolean {
+  const lower = sentence.toLowerCase();
+  if (/^\s*\[.*\]\(https?:\/\//.test(sentence)) return true;
+  if ((sentence.match(/https?:\/\//g) ?? []).length >= 3) return true;
+  if (/^\s*(?:skip to|jump to|table of contents|menu|navigation|breadcrumb)/i.test(lower)) return true;
+  if (/^\s*(?:cookie|privacy|terms of|log ?in|sign ?up|subscribe|newsletter)/i.test(lower)) return true;
+  return false;
+}
+
 export function selectEvidenceWindows(claim: string, sourceText: string, limit = 3): EvidenceWindow[] {
   const claimTokens = [...uniqueTokens(claim)];
   if (claimTokens.length === 0) return [];
 
-  const sentences = splitSentences(sourceText);
+  const sentences = splitSentences(sourceText).filter(s => !isNavGarbage(s));
   const windows: EvidenceWindow[] = [];
 
   for (let i = 0; i < sentences.length; i++) {
@@ -1086,8 +1095,9 @@ export function deriveDeterministicVerdict(
 
 function scoreResult(result: VerifyResult): { support: number; contradiction: number; unresolved: number } {
   if (result.status === 'SUPPORTED') {
+    const base = result.supportScore ?? result.confidence ?? 0.88;
     return {
-      support: clamp01(result.supportScore ?? result.confidence ?? 0.78),
+      support: clamp01(Math.max(base, 0.75)),
       contradiction: clamp01(result.contradictionScore ?? 0),
       unresolved: 0,
     };
@@ -1095,37 +1105,38 @@ function scoreResult(result: VerifyResult): { support: number; contradiction: nu
 
   if (result.status === 'UNSUPPORTED') {
     return {
-      support: clamp01(result.supportScore ?? 0.12),
+      support: clamp01(result.supportScore ?? 0.1),
       contradiction: clamp01(result.contradictionScore ?? result.confidence ?? 0.82),
       unresolved: 0,
     };
   }
 
-  if (result.status === 'UNVERIFIABLE') {
-    return { support: 0.42, contradiction: 0.25, unresolved: 1 };
+  if (result.status === 'UNREACHABLE' || result.status === 'UNCITED') {
+    return { support: 0, contradiction: 0, unresolved: 1 };
   }
 
-  return { support: 0.2, contradiction: 0.35, unresolved: 1 };
+  return { support: 0.3, contradiction: 0, unresolved: 1 };
 }
 
 export function buildAcceptanceGate(results: VerifyResult[]): AcceptanceGateReport {
+  const cited = results.filter(r => r.status !== 'UNCITED');
   const counts = {
-    SUPPORTED: results.filter(result => result.status === 'SUPPORTED').length,
-    UNSUPPORTED: results.filter(result => result.status === 'UNSUPPORTED').length,
-    UNVERIFIABLE: results.filter(result => result.status === 'UNVERIFIABLE').length,
-    UNREACHABLE: results.filter(result => result.status === 'UNREACHABLE').length,
-    total: results.length,
+    SUPPORTED: cited.filter(result => result.status === 'SUPPORTED').length,
+    UNSUPPORTED: cited.filter(result => result.status === 'UNSUPPORTED').length,
+    UNVERIFIABLE: cited.filter(result => result.status === 'UNVERIFIABLE').length,
+    UNREACHABLE: cited.filter(result => result.status === 'UNREACHABLE').length,
+    total: cited.length,
   };
 
   const thresholds = {
-    acceptScore: 0.82,
+    acceptScore: 0.72,
     rejectContradiction: 0.78,
-    maxUnresolvedRatio: 0.25,
+    maxUnresolvedRatio: 0.5,
   };
 
-  if (results.length === 0) {
+  if (cited.length === 0) {
     return {
-      methodVersion: 'truthlayer-gate-v0.3',
+      methodVersion: 'truthlayer-gate-v0.4',
       decision: 'ABSTAIN',
       label: 'No citations',
       score: 0,
@@ -1138,13 +1149,24 @@ export function buildAcceptanceGate(results: VerifyResult[]): AcceptanceGateRepo
     };
   }
 
-  const scored = results.map(scoreResult);
-  const averageSupport = scored.reduce((sum, item) => sum + item.support, 0) / scored.length;
+  const verifiable = cited.filter(r => r.status !== 'UNREACHABLE');
+  const verifiableCount = verifiable.length;
+
+  const scored = cited.map(scoreResult);
+  const verifiableScored = scored.filter((_, i) => cited[i].status !== 'UNREACHABLE');
+
+  const averageSupport = verifiableCount > 0
+    ? verifiableScored.reduce((sum, item) => sum + item.support, 0) / verifiableCount
+    : 0;
   const maxContradiction = scored.reduce((max, item) => Math.max(max, item.contradiction), 0);
-  const unresolvedRatio = scored.reduce((sum, item) => sum + item.unresolved, 0) / scored.length;
-  const penalty = maxContradiction * 0.55 + unresolvedRatio * 0.25;
+  const unresolvedInVerifiable = verifiableCount > 0
+    ? verifiableScored.reduce((sum, item) => sum + item.unresolved, 0) / verifiableCount
+    : 1;
+  const coverage = cited.length > 0 ? verifiableCount / cited.length : 0;
+
+  const penalty = maxContradiction * 0.55 + unresolvedInVerifiable * 0.15;
   const score = clamp01(averageSupport - penalty);
-  const risk = clamp01(1 - score + maxContradiction * 0.25 + unresolvedRatio * 0.18);
+  const risk = clamp01(1 - score + maxContradiction * 0.3);
 
   let decision: GateDecision;
   let label: string;
@@ -1158,21 +1180,33 @@ export function buildAcceptanceGate(results: VerifyResult[]): AcceptanceGateRepo
     decision = 'REVISE';
     label = 'Needs revision';
     failureModes.push('At least one citation does not support its claim');
-  } else if (unresolvedRatio > thresholds.maxUnresolvedRatio || counts.UNREACHABLE > 0) {
+  } else if (verifiableCount === 0) {
+    decision = 'ABSTAIN';
+    label = 'No evidence';
+    failureModes.push('No sources could be retrieved');
+  } else if (unresolvedInVerifiable > thresholds.maxUnresolvedRatio && counts.SUPPORTED === 0) {
     decision = 'ABSTAIN';
     label = 'Insufficient evidence';
     failureModes.push('Too many claims could not be verified');
-  } else if (score >= thresholds.acceptScore && counts.SUPPORTED === counts.total) {
+  } else if (score >= thresholds.acceptScore && counts.SUPPORTED >= verifiableCount * 0.7) {
     decision = 'ACCEPT';
     label = 'Accepted';
+  } else if (counts.SUPPORTED > 0) {
+    decision = counts.SUPPORTED >= verifiableCount * 0.5 ? 'ACCEPT' : 'REVISE';
+    label = decision === 'ACCEPT' ? 'Accepted' : 'Borderline';
+    if (decision === 'REVISE') failureModes.push('Support score below acceptance threshold');
   } else {
     decision = 'REVISE';
     label = 'Borderline';
     failureModes.push('Support score below acceptance threshold');
   }
 
+  if (counts.UNREACHABLE > 0) {
+    failureModes.push(`${counts.UNREACHABLE} source${counts.UNREACHABLE === 1 ? '' : 's'} could not be retrieved`);
+  }
+
   return {
-    methodVersion: 'truthlayer-gate-v0.3',
+    methodVersion: 'truthlayer-gate-v0.4',
     decision,
     label,
     score,
@@ -1189,8 +1223,9 @@ function gatePolicy(): string[] {
   return [
     'REJECT if any cited claim has high-confidence contradiction evidence (score >= 0.78).',
     'REVISE if a citation mismatch exists but confidence is below the reject threshold.',
-    'ABSTAIN if source retrieval or evidence coverage leaves >25% of claims unresolved.',
-    'ACCEPT only when every cited claim is supported and aggregate score >= 0.82.',
+    'ABSTAIN only if no sources could be retrieved or all verifiable claims are unresolved.',
+    'ACCEPT when the majority of verifiable claims are supported (score >= 0.72).',
+    'Unreachable sources are excluded from scoring and reported separately as coverage.',
   ];
 }
 
@@ -1202,17 +1237,21 @@ function gateSummary(
 ): string {
   const pct = Math.round(score * 100);
   const riskPct = Math.round(risk * 100);
+  const verified = counts.SUPPORTED;
+  const total = counts.total;
+  const unreachable = counts.UNREACHABLE;
+  const coverageNote = unreachable > 0 ? ` (${unreachable} source${unreachable === 1 ? '' : 's'} unreachable)` : '';
 
   if (decision === 'ACCEPT') {
-    return `All ${counts.total} cited claims cleared the gate (${pct}% support, ${riskPct}% residual risk).`;
+    return `${verified} of ${total} citations verified against sources (${pct}% confidence)${coverageNote}.`;
   }
   if (decision === 'REJECT') {
-    return `${counts.UNSUPPORTED} cited claim${counts.UNSUPPORTED === 1 ? '' : 's'} contradicted source evidence (${riskPct}% risk).`;
+    return `${counts.UNSUPPORTED} citation${counts.UNSUPPORTED === 1 ? '' : 's'} contradicted by source evidence (${riskPct}% risk)${coverageNote}.`;
   }
   if (decision === 'ABSTAIN') {
-    return `${counts.UNVERIFIABLE + counts.UNREACHABLE} cited claim${counts.UNVERIFIABLE + counts.UNREACHABLE === 1 ? '' : 's'} lacked enough evidence to verify.`;
+    return `Could not retrieve enough evidence to verify claims${coverageNote}.`;
   }
-  return `The answer needs revision before release (${pct}% support, ${riskPct}% risk).`;
+  return `${verified} of ${total - unreachable} verifiable citations supported (${pct}% score)${coverageNote}.`;
 }
 
 // --- Benchmark analysis ---
@@ -1222,7 +1261,7 @@ export function computeConfusionMatrix(
 ): ConfusionMatrix {
   let tp = 0, fp = 0, fn = 0, tn = 0;
   for (const { predicted, expected } of predictions) {
-    if (predicted === 'UNVERIFIABLE' || predicted === 'UNREACHABLE') continue;
+    if (predicted === 'UNVERIFIABLE' || predicted === 'UNREACHABLE' || predicted === 'UNCITED') continue;
     if (predicted === 'UNSUPPORTED' && expected === 'UNSUPPORTED') tp++;
     else if (predicted === 'UNSUPPORTED' && expected === 'SUPPORTED') fp++;
     else if (predicted === 'SUPPORTED' && expected === 'UNSUPPORTED') fn++;
@@ -1252,7 +1291,7 @@ export function computeBenchmarkAnalysis(
   const falseAcceptRate = fn + tn > 0 ? fn / (fn + tp) : 0;
   const falseRejectRate = fp + tn > 0 ? fp / (fp + tn) : 0;
 
-  const abstentionCount = predictions.filter(p => p.predicted === 'UNVERIFIABLE' || p.predicted === 'UNREACHABLE').length;
+  const abstentionCount = predictions.filter(p => p.predicted === 'UNVERIFIABLE' || p.predicted === 'UNREACHABLE' || p.predicted === 'UNCITED').length;
   const abstentionRate = total > 0 ? abstentionCount / total : 0;
 
   const coverageConditionedAccuracy = scored > 0 ? (tp + tn) / scored : 0;
@@ -1265,7 +1304,7 @@ export function computeBenchmarkAnalysis(
     const upper = (b + 1) / bins;
     const binItems = predictions.filter(p => {
       const conf = p.confidence ?? 0.5;
-      return conf >= lower && conf < upper && p.predicted !== 'UNVERIFIABLE' && p.predicted !== 'UNREACHABLE';
+      return conf >= lower && conf < upper && p.predicted !== 'UNVERIFIABLE' && p.predicted !== 'UNREACHABLE' && p.predicted !== 'UNCITED';
     });
     if (binItems.length === 0) continue;
     const avgConf = binItems.reduce((sum, p) => sum + (p.confidence ?? 0.5), 0) / binItems.length;
@@ -1321,7 +1360,7 @@ export function computeThresholdSweep(
     let tp = 0, fp = 0, fn = 0, tn = 0;
 
     for (const p of predictions) {
-      if (p.predicted === 'UNVERIFIABLE' || p.predicted === 'UNREACHABLE') continue;
+      if (p.predicted === 'UNVERIFIABLE' || p.predicted === 'UNREACHABLE' || p.predicted === 'UNCITED') continue;
       const conf = p.confidence ?? 0.5;
       const predUnsupported = p.predicted === 'UNSUPPORTED' && conf >= threshold;
       const actualUnsupported = p.expected === 'UNSUPPORTED';

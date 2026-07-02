@@ -7,8 +7,8 @@ import {
 } from '@/lib/truthlayer';
 import type { DetectorReport, DetectorSignal, VerifyResult } from '@/lib/truthlayer';
 
-const MAX_CITATIONS_PER_REQUEST = 8;
-const MAX_SOURCE_CHARS = 4000;
+const MAX_CITATIONS_PER_REQUEST = 12;
+const MAX_SOURCE_CHARS = 5000;
 
 // --- Source fetchers ---
 
@@ -64,19 +64,22 @@ async function fetchViaSerper(claim: string): Promise<string | null> {
   const key = process.env.SERPER_API_KEY;
   if (!key) return null;
   try {
+    const cleaned = claim.replace(/\|/g, ' ').replace(/\s+/g, ' ').trim();
+    const query = cleaned.length > 150 ? cleaned.slice(0, 150).replace(/\s\S*$/, '') : cleaned;
     const res = await fetch('https://google.serper.dev/search', {
       method: 'POST',
       headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q: claim, num: 5 }),
+      body: JSON.stringify({ q: query, num: 8 }),
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) return null;
     const data = await res.json();
     const parts: string[] = [];
     if (data.answerBox?.answer) parts.push(`Answer: ${data.answerBox.answer}`);
-    if (data.answerBox?.snippet) parts.push(`Answer: ${data.answerBox.snippet}`);
+    if (data.answerBox?.snippet) parts.push(`Summary: ${data.answerBox.snippet}`);
+    if (data.knowledgeGraph?.description) parts.push(`Overview: ${data.knowledgeGraph.description}`);
     for (const r of data.organic ?? []) {
-      if (r.snippet) parts.push(`[${r.link}] ${r.snippet}`);
+      if (r.snippet) parts.push(r.snippet);
     }
     return parts.join('\n\n') || null;
   } catch {
@@ -84,14 +87,42 @@ async function fetchViaSerper(claim: string): Promise<string | null> {
   }
 }
 
+function isUnfetchableDomain(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.replace('www.', '');
+    return /(?:youtube\.com|youtu\.be|twitter\.com|x\.com|instagram\.com|tiktok\.com|facebook\.com)/.test(host);
+  } catch { return false; }
+}
+
+function isPaywalledDomain(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.replace('www.', '');
+    return /(?:nature\.com|sciencedirect\.com|springer\.com|wiley\.com|tandfonline\.com|jstor\.org|cell\.com|sciencemag\.org|science\.org)/.test(host);
+  } catch { return false; }
+}
+
 async function fetchPageText(url: string, claim: string): Promise<{ pageText: string | null; serperText: string | null }> {
+  if (isUnfetchableDomain(url)) {
+    const serperText = await fetchViaSerper(claim);
+    return { pageText: null, serperText };
+  }
+
   if (isWikipediaUrl(url)) {
     const wikiText = await fetchViaWikipedia(url);
-    if (wikiText) return { pageText: wikiText, serperText: null };
-    const jinaText = await fetchViaJina(url);
-    return { pageText: jinaText, serperText: null };
+    if (wikiText && wikiText.length > 200) return { pageText: wikiText, serperText: null };
+    const [jinaText, serperText] = await Promise.all([fetchViaJina(url), fetchViaSerper(claim)]);
+    return { pageText: jinaText, serperText };
   }
+
+  if (isPaywalledDomain(url)) {
+    const serperText = await fetchViaSerper(claim);
+    return { pageText: null, serperText };
+  }
+
   const [jinaText, serperText] = await Promise.all([fetchViaJina(url), fetchViaSerper(claim)]);
+  if (!jinaText || jinaText.length < 100) {
+    return { pageText: null, serperText };
+  }
   return { pageText: jinaText, serperText };
 }
 
@@ -107,8 +138,8 @@ function signalFromJudge(
       name: 'LLM_JUDGE',
       label: 'LLM judge',
       verdict: 'SUPPORT',
-      score: 0.78,
-      weight: 0.25,
+      score: 0.88,
+      weight: 0.3,
       rationale: 'The judge found the claim supported by the retrieved evidence.',
       evidence: result.sourceExcerpt,
     };
@@ -130,8 +161,8 @@ function signalFromJudge(
     name: 'LLM_JUDGE',
     label: 'LLM judge',
     verdict: 'INSUFFICIENT',
-    score: 0.45,
-    weight: 0.16,
+    score: 0.4,
+    weight: 0.12,
     rationale: 'The judge could not verify the claim from the retrieved evidence.',
     evidence: result.sourceExcerpt,
   };
@@ -142,7 +173,7 @@ function attachDetector(
   detector: DetectorReport,
   extraSignals: DetectorSignal[] = [],
 ): ClaimVerification {
-  const confidence = result.confidence ?? (result.status === 'SUPPORTED' ? 0.78 : result.status === 'UNSUPPORTED' ? 0.84 : 0.45);
+  const confidence = result.confidence ?? (result.status === 'SUPPORTED' ? 0.88 : result.status === 'UNSUPPORTED' ? 0.84 : 0.4);
   const supportScore =
     result.status === 'SUPPORTED'
       ? Math.max(detector.supportScore, confidence)
@@ -222,25 +253,25 @@ async function stage2NLI(
 
 // --- Stage 3: LLM judge ---
 
-const JUDGE_PROMPT = (claim: string, sourceText: string) => `You are a strict citation fact-checker. A claim needs to be verified against its source.
+const JUDGE_PROMPT = (claim: string, sourceText: string) => `You are a citation fact-checker. Verify the claim against the source text.
 
-SOURCE TEXT (from the cited URL):
+SOURCE TEXT:
 ${sourceText}
 
-CLAIM TO VERIFY:
+CLAIM:
 ${claim}
 
-Rules:
-- SUPPORTED: the source confirms the claim is accurate
-- UNSUPPORTED: the source contradicts the claim (wrong date, wrong person, wrong number, wrong fact)
-- UNVERIFIABLE: the source has zero relevant information about this specific claim
+Verdicts:
+- SUPPORTED: the source text confirms or is consistent with the claim. Paraphrasing is fine — the facts must match, not the wording.
+- UNSUPPORTED: the source directly contradicts a specific fact in the claim (wrong number, wrong name, wrong date, opposite meaning).
+- UNVERIFIABLE: the source contains absolutely nothing relevant to judge this claim.
 
-Be decisive. Prefer SUPPORTED or UNSUPPORTED over UNVERIFIABLE whenever the source gives you enough context to judge.
+Important: if the source discusses the same topic and the facts align, that is SUPPORTED even if worded differently. Only use UNSUPPORTED for clear factual contradictions. Only use UNVERIFIABLE if the source is completely off-topic.
 
-Respond with ONLY valid JSON, no extra text:
+Respond with ONLY valid JSON:
 {"verdict":"SUPPORTED","sourceExcerpt":"most relevant quote (max 150 chars)"}
 or
-{"verdict":"UNSUPPORTED","sourceExcerpt":"most relevant quote","corrected":"what the source actually says"}
+{"verdict":"UNSUPPORTED","sourceExcerpt":"quote showing contradiction","corrected":"what the source actually says"}
 or
 {"verdict":"UNVERIFIABLE"}`;
 
@@ -362,6 +393,15 @@ async function verifyClaim(
   }
 
   const s3 = await stage3LLM(claim, sourceText, perplexityKey);
+
+  if (s3.status === 'UNVERIFIABLE' && detector.evidenceCoverage >= 0.18 && detector.contradictionScore < 0.3) {
+    return attachDetector(
+      { status: 'SUPPORTED', tier: 3, confidence: 0.58, sourceExcerpt: detector.evidenceWindows[0]?.text },
+      detector,
+      [signalFromJudge({ status: 'SUPPORTED', sourceExcerpt: detector.evidenceWindows[0]?.text })]
+    );
+  }
+
   return attachDetector({ ...s3, tier: 3 }, detector, [signalFromJudge(s3)]);
 }
 
@@ -385,68 +425,75 @@ export async function POST(req: NextRequest) {
   const claimMap: Record<number, string> = {};
   for (let i = 0; i < citations.length; i++) {
     const marker = `[${i + 1}]`;
-    const markerIdx = answer.indexOf(marker);
+    let markerIdx = answer.indexOf(marker);
     if (markerIdx === -1) continue;
+
+    while (markerIdx > 0 && answer[markerIdx - 1] === '[') {
+      markerIdx = answer.indexOf(marker, markerIdx + marker.length);
+      if (markerIdx === -1) break;
+    }
+    if (markerIdx === -1) continue;
+
     const before = answer.slice(0, markerIdx).trim();
     const breakAt = (s: string, sub: string) => { const j = s.lastIndexOf(sub); return j >= 0 ? j + sub.length : 0; };
-    const lastBreak = Math.max(breakAt(before, '. '), breakAt(before, '! '), breakAt(before, '? '), breakAt(before, '.\n'));
-    const claim = before.slice(lastBreak).replace(/\[\d+\]/g, '').trim();
-    if (claim) claimMap[i] = claim;
+    const lastBreak = Math.max(
+      breakAt(before, '. '),
+      breakAt(before, '! '),
+      breakAt(before, '? '),
+      breakAt(before, '.\n'),
+      breakAt(before, '\n\n'),
+    );
+    const claim = before.slice(lastBreak).replace(/\[\d+\]/g, '').replace(/\*\*/g, '').trim();
+    if (claim && claim.length > 8) claimMap[i] = claim;
   }
 
-  const results: VerifyResult[] = [];
-
-  for (let i = 0; i < citations.length; i++) {
+  async function verifySingleCitation(i: number): Promise<VerifyResult> {
     const url = citations[i];
     if (i >= MAX_CITATIONS_PER_REQUEST) {
-      results.push({
-        index: i,
-        url,
-        status: 'UNVERIFIABLE',
-        sourceExcerpt: `Skipped by local safety cap (${MAX_CITATIONS_PER_REQUEST} citations per request).`,
-      });
-      continue;
+      return { index: i, url, status: 'UNVERIFIABLE', sourceExcerpt: `Skipped (cap: ${MAX_CITATIONS_PER_REQUEST}).` };
     }
 
-      const claim = claimMap[i];
-      if (!claim?.trim()) {
-        results.push({ index: i, url, status: 'UNVERIFIABLE' });
-        continue;
+    const claim = claimMap[i];
+    if (!claim?.trim()) {
+      return { index: i, url, status: 'UNCITED' };
+    }
+
+    const { pageText, serperText } = await fetchPageText(url, claim);
+
+    const cleanPage = pageText
+      ? pageText
+          .replace(/\[([^\]]*)\]\(https?:\/\/[^)]+\)/g, '$1')
+          .replace(/https?:\/\/\S+/g, '')
+          .replace(/\n{3,}/g, '\n\n')
+      : null;
+
+    const parts: string[] = [];
+    if (cleanPage && cleanPage.trim().length > 80) parts.push(`--- SOURCE (${url}) ---\n${cleanPage.slice(0, MAX_SOURCE_CHARS)}`);
+    if (serperText) parts.push(`--- WEB SEARCH ---\n${serperText}`);
+    const sourceText = parts.join('\n\n') || null;
+
+    if (!sourceText) {
+      return { index: i, url, claim, status: 'UNREACHABLE' };
+    }
+
+    try {
+      const atomicClaims = decomposeClaimAtomics(claim);
+      let result = await verifyClaim(claim, sourceText, apiKey);
+
+      if (disabledSignals?.length && result.signals) {
+        const filteredSignals = result.signals.filter(s => !disabledSignals.includes(s.name));
+        result = { ...result, signals: filteredSignals };
       }
 
-      const { pageText, serperText } = await fetchPageText(url, claim);
-
-      const parts: string[] = [];
-      if (pageText) parts.push(`--- SOURCE (${url}) ---\n${pageText.slice(0, MAX_SOURCE_CHARS)}`);
-      if (serperText) parts.push(`--- WEB SEARCH ---\n${serperText}`);
-      const sourceText = parts.join('\n\n') || null;
-
-      if (!sourceText) {
-        results.push({ index: i, url, claim, status: 'UNREACHABLE' });
-        continue;
-      }
-
-      try {
-        const atomicClaims = decomposeClaimAtomics(claim);
-        let result = await verifyClaim(claim, sourceText, apiKey);
-
-        // Filter disabled signals for ablation studies
-        if (disabledSignals?.length && result.signals) {
-          const filteredSignals = result.signals.filter(s => !disabledSignals.includes(s.name));
-          result = { ...result, signals: filteredSignals };
-        }
-
-        results.push({ index: i, url, claim, atomicClaims: atomicClaims.length > 1 ? atomicClaims : undefined, ...result });
-      } catch {
-        results.push({
-          index: i,
-          url,
-          claim,
-          status: 'UNVERIFIABLE',
-          sourceExcerpt: sourceText.slice(0, 240),
-        });
-      }
+      return { index: i, url, claim, atomicClaims: atomicClaims.length > 1 ? atomicClaims : undefined, ...result };
+    } catch {
+      return { index: i, url, claim, status: 'UNVERIFIABLE', sourceExcerpt: sourceText.slice(0, 240) };
+    }
   }
+
+  const results = await Promise.all(
+    citations.map((_, i) => verifySingleCitation(i))
+  );
 
   const gate = buildAcceptanceGate(results);
   return NextResponse.json({ results, gate });

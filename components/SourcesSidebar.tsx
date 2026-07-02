@@ -13,6 +13,7 @@ const STATUS = {
   UNSUPPORTED:  { dot: 'bg-red-400',     ring: 'border-red-500/25 bg-red-500/5',         label: 'Flagged'  },
   UNVERIFIABLE: { dot: 'bg-purple-400',  ring: 'border-purple-500/25 bg-purple-500/5',   label: 'Uncertain'},
   UNREACHABLE:  { dot: 'bg-amber-400',   ring: 'border-amber-500/25 bg-amber-500/5',     label: 'No source'},
+  UNCITED:      { dot: 'bg-gray-400',    ring: 'border-gray-500/25 bg-gray-500/5',       label: 'Not cited'},
 };
 
 function getFavicon(url: string) {

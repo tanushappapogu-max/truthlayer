@@ -14,6 +14,7 @@ const CONFIG = {
   UNSUPPORTED:  { icon: '✗', bg: 'bg-red-500/15',     text: 'text-red-400',     border: 'border-red-500/30',     label: 'Flagged'  },
   UNVERIFIABLE: { icon: '?', bg: 'bg-purple-500/15',  text: 'text-purple-400',  border: 'border-purple-500/30',  label: 'Uncertain'},
   UNREACHABLE:  { icon: '~', bg: 'bg-amber-500/15',   text: 'text-amber-400',   border: 'border-amber-500/30',   label: 'No source'},
+  UNCITED:      { icon: '·', bg: 'bg-gray-500/15',    text: 'text-gray-400',    border: 'border-gray-500/30',    label: 'Not cited'},
 };
 
 const VERDICT_COLOR: Record<DetectorVerdict, string> = {
