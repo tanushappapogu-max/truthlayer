@@ -1,0 +1,12 @@
+{
+  "system": "nli",
+  "split": "test",
+  "limit": 0,
+  "git_commit": "46ec4d050ee91bf5bf976a89eb5781522e3839a1",
+  "dataset_hash": "faf020de4dd0a6b1",
+  "timestamp": "2026-07-03T04:38:01.733982+00:00",
+  "model": "cross-encoder/nli-deberta-v3-base",
+  "threshold": 0.05,
+  "window_tokens": 400,
+  "batch": 8
+}

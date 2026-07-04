@@ -87,6 +87,88 @@ async function fetchViaSerper(claim: string): Promise<string | null> {
   }
 }
 
+async function fetchViaSemanticScholar(claim: string): Promise<string | null> {
+  try {
+    const cleaned = claim.replace(/\|/g, ' ').replace(/\s+/g, ' ').trim();
+    const query = cleaned.length > 120 ? cleaned.slice(0, 120).replace(/\s\S*$/, '') : cleaned;
+    const res = await fetch(
+      `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=5&fields=title,abstract,tldr`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const parts: string[] = [];
+    for (const paper of data.data ?? []) {
+      if (paper.tldr?.text) parts.push(paper.tldr.text);
+      else if (paper.abstract) parts.push(paper.abstract.slice(0, 500));
+    }
+    return parts.join('\n\n') || null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchViaPubMed(url: string): Promise<string | null> {
+  const pmcMatch = url.match(/pmc\.ncbi\.nlm\.nih\.gov\/articles\/(PMC\d+)/i)
+    || url.match(/ncbi\.nlm\.nih\.gov\/pmc\/articles\/(PMC\d+)/i);
+  if (!pmcMatch) return null;
+  const pmcId = pmcMatch[1];
+  try {
+    const idRes = await fetch(
+      `https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids=${pmcId}&format=json`,
+      { signal: AbortSignal.timeout(6000) }
+    );
+    if (!idRes.ok) return null;
+    const idData = await idRes.json();
+    const pmid = idData.records?.[0]?.pmid;
+    if (!pmid) return null;
+
+    const absRes = await fetch(
+      `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=${pmid}&rettype=abstract&retmode=text`,
+      { signal: AbortSignal.timeout(6000) }
+    );
+    if (!absRes.ok) return null;
+    const text = await absRes.text();
+    return text.length > 100 ? text.slice(0, 4000) : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractDOI(url: string): string | null {
+  const doiMatch = url.match(/(?:doi\.org\/|\/doi\/(?:full\/|abs\/)?)(10\.\d{4,}\/[^\s?#]+)/i);
+  if (doiMatch) return doiMatch[1];
+  const natureMatch = url.match(/nature\.com\/articles\/(s\d+-\d+-\d+-\w)/);
+  if (natureMatch) return `10.1038/${natureMatch[1]}`;
+  return null;
+}
+
+async function fetchAcademicText(url: string, claim: string): Promise<string | null> {
+  const pubmed = await fetchViaPubMed(url);
+  if (pubmed) return pubmed;
+
+  const doi = extractDOI(url);
+  if (doi) {
+    try {
+      const res = await fetch(
+        `https://api.semanticscholar.org/graph/v1/paper/DOI:${doi}?fields=title,abstract,tldr`,
+        { signal: AbortSignal.timeout(6000) }
+      );
+      if (res.ok) {
+        const paper = await res.json();
+        const parts: string[] = [];
+        if (paper.title) parts.push(paper.title);
+        if (paper.tldr?.text) parts.push(paper.tldr.text);
+        if (paper.abstract) parts.push(paper.abstract);
+        const text = parts.join('\n\n');
+        if (text.length > 100) return text.slice(0, 4000);
+      }
+    } catch { /* fall through */ }
+  }
+
+  return fetchViaSemanticScholar(claim);
+}
+
 function isUnfetchableDomain(url: string): boolean {
   try {
     const host = new URL(url).hostname.replace('www.', '');
@@ -101,25 +183,41 @@ function isPaywalledDomain(url: string): boolean {
   } catch { return false; }
 }
 
+function isAcademicDomain(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.replace('www.', '');
+    return /(?:ncbi\.nlm\.nih\.gov|pmc\.ncbi|pubmed|arxiv\.org|biorxiv\.org|medrxiv\.org|doi\.org)/.test(host)
+      || isPaywalledDomain(url);
+  } catch { return false; }
+}
+
+async function fetchFallbackText(url: string, claim: string): Promise<string | null> {
+  const serper = await fetchViaSerper(claim);
+  if (serper) return serper;
+  if (isAcademicDomain(url)) return fetchAcademicText(url, claim);
+  return fetchViaSemanticScholar(claim);
+}
+
 async function fetchPageText(url: string, claim: string): Promise<{ pageText: string | null; serperText: string | null }> {
   if (isUnfetchableDomain(url)) {
-    const serperText = await fetchViaSerper(claim);
+    const serperText = await fetchFallbackText(url, claim);
     return { pageText: null, serperText };
   }
 
   if (isWikipediaUrl(url)) {
     const wikiText = await fetchViaWikipedia(url);
     if (wikiText && wikiText.length > 200) return { pageText: wikiText, serperText: null };
-    const [jinaText, serperText] = await Promise.all([fetchViaJina(url), fetchViaSerper(claim)]);
+    const [jinaText, serperText] = await Promise.all([fetchViaJina(url), fetchFallbackText(url, claim)]);
     return { pageText: jinaText, serperText };
   }
 
-  if (isPaywalledDomain(url)) {
-    const serperText = await fetchViaSerper(claim);
-    return { pageText: null, serperText };
+  if (isAcademicDomain(url)) {
+    const [jinaText, academicText] = await Promise.all([fetchViaJina(url), fetchAcademicText(url, claim)]);
+    if (jinaText && jinaText.length > 200) return { pageText: jinaText, serperText: academicText };
+    return { pageText: academicText, serperText: null };
   }
 
-  const [jinaText, serperText] = await Promise.all([fetchViaJina(url), fetchViaSerper(claim)]);
+  const [jinaText, serperText] = await Promise.all([fetchViaJina(url), fetchFallbackText(url, claim)]);
   if (!jinaText || jinaText.length < 100) {
     return { pageText: null, serperText };
   }
