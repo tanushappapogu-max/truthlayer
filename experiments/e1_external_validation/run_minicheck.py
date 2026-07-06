@@ -68,7 +68,8 @@ def main():
 
     def predict(pair):
         t0 = time.perf_counter()
-        _, probs, _, _ = scorer.score(docs=[pair.evidence], claims=[pair.claim])
+        doc = pair.evidence[:10000] if len(pair.evidence) > 10000 else pair.evidence
+        _, probs, _, _ = scorer.score(docs=[doc], claims=[pair.claim])
         latency_ms = (time.perf_counter() - t0) * 1000
         return {
             "pred": 1 if probs[0] >= 0.5 else 0,  # official default threshold

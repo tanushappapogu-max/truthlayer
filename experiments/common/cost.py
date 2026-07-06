@@ -16,6 +16,7 @@ PARAMS = {
     "signals": 0,
     "nli": 184_000_000,
     "minicheck": 783_000_000,
+    "tafs": 22_700_000,  # all-MiniLM-L6-v2
 }
 
 
@@ -31,10 +32,13 @@ def cost_summary(rows: list[dict], system: str) -> dict:
     lat = [r["latency_ms"] for r in rows]
     n = len(rows)
 
-    if system == "tiered":
-        # params only invoked on cases that escalated to NLI
-        nli_invocations = sum(1 for r in rows if r.get("tier") == "nli")
-        param_invocations = PARAMS["nli"] * nli_invocations
+    tier_models = {"tiered": "nli", "tiered_tafs": "tafs",
+                   "tiered_minicheck": "minicheck"}
+    if system in tier_models:
+        # params only invoked on cases that escalated past the signals
+        model = tier_models[system]
+        escalations = sum(1 for r in rows if r.get("tier") == model)
+        param_invocations = PARAMS[model] * escalations
     else:
         param_invocations = PARAMS.get(system, 0) * n
 

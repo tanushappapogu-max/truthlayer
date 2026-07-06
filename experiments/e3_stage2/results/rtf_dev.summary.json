@@ -1,0 +1,7 @@
+{
+  "n": 1000,
+  "best_threshold": 0.04,
+  "best_bacc": 0.528560556987484,
+  "ms_per_claim": 1750.320036220597,
+  "bar_minicheck_escalated": 0.716
+}

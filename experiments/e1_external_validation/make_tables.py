@@ -13,7 +13,8 @@ from harness import RESULTS  # noqa: E402
 from common.tables import headline_table, breakdown_table  # noqa: E402
 
 PAPER_RESULTS = Path(__file__).resolve().parent.parent.parent / "paper" / "results"
-SYSTEMS = ["signals", "nli", "minicheck", "tiered"]
+SYSTEMS = ["signals", "nli", "tafs", "tiered", "tiered_tafs",
+           "minicheck", "tiered_minicheck"]
 
 
 def main():

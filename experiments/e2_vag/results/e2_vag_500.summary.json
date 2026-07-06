@@ -1,0 +1,16 @@
+{
+  "n_docs": 500,
+  "raw": {
+    "claims": 1487,
+    "unsupported": 201,
+    "hallucination_rate": 0.1351714862138534
+  },
+  "vag": {
+    "claims": 1402,
+    "unsupported": 149,
+    "hallucination_rate": 0.10627674750356633,
+    "regenerations": 60,
+    "blocked": 5,
+    "caught_by_verifier": 74
+  }
+}

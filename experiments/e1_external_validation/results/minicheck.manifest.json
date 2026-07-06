@@ -1,0 +1,10 @@
+{
+  "system": "minicheck",
+  "split": "test",
+  "limit": 0,
+  "git_commit": "56e1ec3a4e6fac12464efc13ede67306ff77791d",
+  "dataset_hash": "faf020de4dd0a6b1",
+  "model": "lytang/MiniCheck-Flan-T5-Large",
+  "threshold": 0.5,
+  "doc_truncation_chars": 10000
+}

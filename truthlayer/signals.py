@@ -189,11 +189,6 @@ DEFAULT_SIGNAL_RULES: tuple[SignalRule, ...] = (
     SourceRetrievalSignal(),
     LexicalOverlapSignal(),
     EvidenceCoverageSignal(),
-    NumericContradictionSignal(),
-    ContrastContradictionSignal(),
-    NegationContradictionSignal(),
-    EntitySubstitutionSignal(),
-    HedgingMismatchSignal(),
 )
 
 

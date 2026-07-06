@@ -46,8 +46,8 @@ class EvidenceGraphBuilder:
             self._add_edge(graph, EvidenceEdge(evidence_id, "claim:0", "grounds" if window.coverage >= 0.62 else "routes", window.coverage, "grounds claim"))
 
         primary = windows[0].text if windows else evidence[:900]
-        self._add_entity_nodes(graph, claim, primary)
-        self._add_quantity_nodes(graph, claim, primary)
+        self._add_entity_nodes(graph, claim, evidence)
+        self._add_quantity_nodes(graph, claim, evidence)
         self._add_relation_nodes(graph, claim, primary)
         self._add_signal_nodes(graph, report)
         self._score_graph(graph)

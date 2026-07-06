@@ -1,0 +1,50 @@
+{
+  "CONTRAST_CONTRADICTION": {
+    "correct": 18,
+    "total": 53,
+    "accuracy": 0.33962264150943394,
+    "kept": false
+  },
+  "ENTITY_SUBSTITUTION": {
+    "correct": 34,
+    "total": 98,
+    "accuracy": 0.3469387755102041,
+    "kept": false
+  },
+  "EVIDENCE_COVERAGE": {
+    "correct": 1772,
+    "total": 1920,
+    "accuracy": 0.9229166666666667,
+    "kept": true
+  },
+  "HEDGING_MISMATCH": {
+    "correct": 4,
+    "total": 9,
+    "accuracy": 0.4444444444444444,
+    "kept": false
+  },
+  "LEXICAL_OVERLAP": {
+    "correct": 3,
+    "total": 4,
+    "accuracy": 0.75,
+    "kept": true
+  },
+  "NEGATION_CONTRADICTION": {
+    "correct": 170,
+    "total": 1195,
+    "accuracy": 0.14225941422594143,
+    "kept": false
+  },
+  "NUMERIC_CONTRADICTION": {
+    "correct": 550,
+    "total": 1404,
+    "accuracy": 0.39173789173789175,
+    "kept": false
+  },
+  "SOURCE_RETRIEVAL": {
+    "correct": 2367,
+    "total": 3037,
+    "accuracy": 0.77938755350675,
+    "kept": true
+  }
+}

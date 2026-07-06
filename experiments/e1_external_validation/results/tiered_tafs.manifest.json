@@ -1,0 +1,9 @@
+{
+  "system": "tiered_tafs",
+  "split": "test",
+  "limit": 0,
+  "git_commit": "56e1ec3a4e6fac12464efc13ede67306ff77791d",
+  "dataset_hash": "faf020de4dd0a6b1",
+  "timestamp": "2026-07-04T20:48:17.044492+00:00",
+  "tafs_threshold": 0.7
+}
